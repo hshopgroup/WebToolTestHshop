@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Web Serial Plotter (Custom)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-900 text-white p-6">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-2xl font-bold mb-4">Web Serial Plotter ( > 8 Channels )</h1>
+        <button id="connectBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded font-semibold mb-4">Kết nối Serial</button>
+        
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-4">
+            <canvas id="plotterChart" height="100"></canvas>
+        </div>
+
+        <!-- Khung hiển thị log để debug -->
+        <div class="bg-black p-3 rounded font-mono text-xs text-green-400 h-32 overflow-y-auto" id="debugLog">
+            [System] Sẵn sàng kết nối... Nhớ tắt Arduino IDE Serial Monitor trước nhé!
+        </div>
+    </div>
+
+    <script>
+        const connectBtn = document.getElementById('connectBtn');
+        const debugLog = document.getElementById('debugLog');
+
+        function log(msg) {
+            console.log(msg);
+            debugLog.innerHTML += `<br>[${new Date().toLocaleTimeString()}] ${msg}`;
+            debugLog.scrollTop = debugLog.scrollHeight;
+        }
+
+        let port, reader, inputDone;
+        
+        const ctx = document.getElementById('plotterChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: [], datasets: [] },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: { display: true },
+                    y: { beginAtZero: true, suggestedMax: 1023 }
+                },
+                elements: { point: { radius: 0 } }
+            }
+        });
+
+        connectBtn.addEventListener('click', async () => {
+            try {
+                // Kiểm tra xem trình duyệt có hỗ trợ không
+                if (!navigator.serial) {
+                    alert("Trình duyệt này không hỗ trợ Web Serial API! Hãy dùng Google Chrome hoặc Microsoft Edge.");
+                    return;
+                }
+
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 9600 });
+                
+                connectBtn.textContent = "Đã kết nối";
+                connectBtn.classList.replace('bg-blue-600', 'bg-green-600');
+                log("Đã mở cổng COM thành công ở tốc độ 9600!");
+
+                const textDecoder = new TextDecoderStream();
+                inputDone = port.readable.pipeTo(textDecoder.writable);
+                reader = textDecoder.readable.getReader();
+
+                readData();
+            } catch (error) {
+                log("Lỗi kết nối: " + error);
+            }
+        });
+
+        async function readData() {
+            let buffer = "";
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    buffer += value;
+                    let lines = buffer.split("\n");
+                    buffer = lines.pop(); 
+
+                    for (let line of lines) {
+                        processLine(line.trim());
+                    }
+                }
+            } catch (error) {
+                log("Lỗi đọc dữ liệu stream: " + error);
+            }
+        }
+
+        let timeIndex = 0;
+        function processLine(line) {
+            if (!line) return;
+            // log("Nhận dòng: " + line); // Bỏ comment dòng này nếu muốn xem data thô liên tục đổ về
+            
+            const values = line.split('\t').map(Number);
+
+            if (chart.data.datasets.length === 0) {
+                values.forEach((_, index) => {
+                    chart.data.datasets.push({
+                        label: `A${index}`,
+                        data: [],
+                        borderWidth: 1.5,
+                        borderColor: `hsl(${index * (360 / Math.max(values.length, 1))}, 80%, 60%)`
+                    });
+                });
+                log(`Đã khởi tạo ${values.length} kênh hiển thị.`);
+            }
+
+            chart.data.labels.push(timeIndex++);
+            if (chart.data.labels.length > 100) {
+                chart.data.labels.shift();
+            }
+
+            values.forEach((val, index) => {
+                if (chart.data.datasets[index]) {
+                    chart.data.datasets[index].data.push(val);
+                    if (chart.data.datasets[index].data.length > 100) {
+                        chart.data.datasets[index].data.shift();
+                    }
+                }
+            });
+
+            chart.update('none');
+        }
+    </script>
+</body>
+</html>
