@@ -11,6 +11,9 @@
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
 
+    <!-- SheetJS cho xuất file Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
     <style>
         :root {
             --bg-color: #0f172a;
@@ -363,8 +366,9 @@
                         <label><input type="checkbox" id="showHex" checked> HEX</label>
                         <label><input type="checkbox" id="autoScroll" id="cbAutoScroll" checked> Auto Scroll</label>
                         <button class="btn-secondary small" onclick="resetCounters()">Reset</button>
-                        <button class="btn-secondary small" onclick="exportLog('txt')">TXT</button>
+                        <button class="btn-primary small" onclick="exportLog('xlsx')">XLSX</button>
                         <button class="btn-secondary small" onclick="exportLog('csv')">CSV</button>
+                        <button class="btn-secondary small" onclick="exportLog('txt')">TXT</button>
                         <button class="btn-danger small" onclick="clearTerminal()">Clear</button>
                     </div>
                 </div>
@@ -424,8 +428,9 @@
                         <label style="margin-left: 10px; color: var(--danger); font-weight: bold; cursor: pointer;">
                             <input type="checkbox" id="pausePlot"> Tạm dừng
                         </label>
-                        <button class="btn-secondary small" onclick="resetZoom()" style="margin-left: 10px;">Reset Zoom</button>
-                        <button class="btn-primary small" onclick="openSettingsModal()">Thiết lập Kênh</button>
+                        <button class="btn-primary small" onclick="exportPlotter()" style="margin-left: 10px;">Export XLSX</button>
+                        <button class="btn-secondary small" onclick="resetZoom()">Reset Zoom</button>
+                        <button class="btn-secondary small" onclick="openSettingsModal()">Thiết lập Kênh</button>
                         <button class="btn-danger small" onclick="clearChart()">Clear</button>
                     </div>
                 </div>
@@ -761,6 +766,10 @@
         function logTx(msg, isHex = false) { appendLog('log-tx', `TX: ${msg}`, isHex); }
         function logSys(msg, isErr = false) { appendLog(isErr ? 'log-err' : 'log-sys', `[SYS] ${msg}`, false, true); }
 
+        let logData = [];
+        const MAX_LOG_LINES = 50000;
+        const DOM_LIMIT = 1000;
+
         function getTimestamp() {
             if (!document.getElementById('showTime').checked) return "";
             const now = new Date();
@@ -768,9 +777,24 @@
         }
 
         function appendLog(className, text, isHex = false, isSys = false) {
+            const timeStr = getTimestamp();
+            const fullText = timeStr + text;
+            
+            // Lưu vào mảng ngầm để Export (Không lưu HEX thô để tránh lặp trùng lặp thông tin với TXT, trừ khi cần)
+            // Tuy nhiên user muốn lưu cả thì ta lưu cả time, type, data
+            let msgType = className.replace('log-', '').toUpperCase();
+            logData.push({ Time: timeStr.trim(), Type: msgType, IsHex: isHex ? "YES" : "NO", Data: text });
+            
+            // Auto-Save khi đầy
+            if (logData.length >= MAX_LOG_LINES) {
+                logSys(`[AUTO-SAVE] Đã đạt ${MAX_LOG_LINES} dòng. Tự động lưu file XLSX để dọn RAM!`, true);
+                exportLog('xlsx', true);
+                logData = [];
+            }
+
             const p = document.createElement('p');
             p.className = className;
-            p.textContent = getTimestamp() + text;
+            p.textContent = fullText;
             
             if (isSys) {
                 const p2 = p.cloneNode(true);
@@ -780,6 +804,14 @@
                 terminalHex.appendChild(p);
             } else {
                 terminalAscii.appendChild(p);
+            }
+            
+            // Chống treo Web (Anti-Freeze): Giới hạn 1000 thẻ span/p
+            if (terminalAscii.childElementCount > DOM_LIMIT) {
+                terminalAscii.removeChild(terminalAscii.firstChild);
+            }
+            if (terminalHex.childElementCount > DOM_LIMIT) {
+                terminalHex.removeChild(terminalHex.firstChild);
             }
             
             const cbAutoScroll = document.getElementById('autoScroll');
@@ -792,33 +824,45 @@
         function clearTerminal() {
             terminalAscii.innerHTML = '';
             terminalHex.innerHTML = '';
-            logSys("Đã xóa màn hình Terminal.");
+            logData = []; // Clear luon data ngam
+            logSys("Đã xóa màn hình Terminal và bộ nhớ đệm.");
         }
 
-        function exportLog(type) {
-            // ... Logic export có thể cần cập nhật sau, tạm thời giữ nguyên lấy từ ASCII
-            let content = "";
-            const lines = terminalAscii.querySelectorAll('p');
+        function exportLog(type, isAuto = false) {
+            if (logData.length === 0) return alert("Không có dữ liệu để xuất!");
+            const filename = `Terminal_Log_${isAuto ? 'AutoSave_' : ''}${new Date().getTime()}.${type}`;
             
-            if (type === 'csv') {
-                content = "Type,Message\n";
-                lines.forEach(p => {
-                    let msgType = p.className.replace('log-', '').toUpperCase();
-                    let text = p.textContent.replace(/"/g, '""');
-                    content += `${msgType},"${text}"\n`;
+            if (type === 'xlsx') {
+                const ws = XLSX.utils.json_to_sheet(logData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Terminal Log");
+                XLSX.writeFile(wb, filename);
+            } 
+            else if (type === 'csv') {
+                let content = "Time,Type,IsHex,Data\n";
+                logData.forEach(row => {
+                    let text = row.Data.replace(/"/g, '""');
+                    content += `"${row.Time}","${row.Type}","${row.IsHex}","${text}"\n`;
                 });
-            } else {
-                lines.forEach(p => {
-                    content += p.textContent + '\n';
+                const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+            } 
+            else if (type === 'txt') {
+                let content = "";
+                logData.forEach(row => {
+                    content += `${row.Time} ${row.Data}\n`;
                 });
+                const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
             }
-            
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `terminal_log_${new Date().getTime()}.${type}`;
-            a.click();
         }
 
         // --- Script Runner & Import/Export ---
@@ -983,6 +1027,27 @@
 
         function resetZoom() {
             chart.resetZoom();
+        }
+
+        function exportPlotter() {
+            if (chart.data.datasets.length === 0 || chart.data.datasets[0].data.length === 0) {
+                return alert("Không có dữ liệu đồ thị để xuất!");
+            }
+            
+            const rowMap = {};
+            chart.data.datasets.forEach(ds => {
+                ds.data.forEach(point => {
+                    if (!rowMap[point.x]) rowMap[point.x] = { "Time Index": point.x };
+                    rowMap[point.x][ds.label] = point.y;
+                });
+            });
+            
+            const finalArray = Object.values(rowMap).sort((a, b) => a["Time Index"] - b["Time Index"]);
+            
+            const ws = XLSX.utils.json_to_sheet(finalArray);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Plotter Data");
+            XLSX.writeFile(wb, `Plotter_Data_${new Date().getTime()}.xlsx`);
         }
 
         // --- Channel Settings Modal ---
