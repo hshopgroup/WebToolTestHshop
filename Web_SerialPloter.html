@@ -2,37 +2,113 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Web Serial Plotter (Custom)</title>
+    <title>Advanced Web Serial Plotter & Terminal</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gray-900 text-white p-6">
-    <div class="max-w-6xl mx-auto">
-        <h1 class="text-2xl font-bold mb-4">Web Serial Plotter ( > 8 Channels )</h1>
-        <button id="connectBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded font-semibold mb-4">Kết nối Serial</button>
+    <div class="max-w-6xl mx-auto space-y-6">
+        <h1 class="text-2xl font-bold">Web Serial Plotter & Script Sender</h1>
         
-        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-4">
-            <canvas id="plotterChart" height="100"></canvas>
+        <!-- Bảng điều khiển cổng Serial -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg flex flex-wrap items-center gap-4">
+            <div class="flex items-center gap-2">
+                <label class="text-sm font-medium">BaudRate:</label>
+                <select id="baudRate" class="bg-gray-700 text-white px-3 py-1.5 rounded border border-gray-600 focus:outline-none">
+                    <option value="9600">9600</option>
+                    <option value="19200">19200</option>
+                    <option value="38400">38400</option>
+                    <option value="57600">57600</option>
+                    <option value="115200" selected>115200</option>
+                </select>
+            </div>
+            
+            <button id="connectBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded font-semibold transition">Kết nối Serial</button>
+            <button id="disconnectBtn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded font-semibold transition hidden">Ngắt kết nối</button>
         </div>
 
-        <!-- Khung hiển thị log để debug -->
-        <div class="bg-black p-3 rounded font-mono text-xs text-green-400 h-32 overflow-y-auto" id="debugLog">
-            [System] Sẵn sàng kết nối... Nhớ tắt Arduino IDE Serial Monitor trước nhé!
+        <!-- Khung vẽ biểu đồ -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+            <h2 class="text-lg font-semibold mb-2">Biểu đồ thời gian thực</h2>
+            <canvas id="plotterChart" height="90"></canvas>
+        </div>
+
+        <!-- Khu vực gửi dữ liệu (Manual & Script List) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Gửi thủ công -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg space-y-3">
+                <h2 class="text-lg font-semibold">Gửi thủ công (Manual Send)</h2>
+                <div class="flex gap-2">
+                    <input type="text" id="manualInput" placeholder="Nhập lệnh hoặc $1A (HEX)..." class="flex-1 bg-gray-700 px-3 py-2 rounded border border-gray-600 text-white focus:outline-none">
+                    <button id="sendManualBtn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-semibold transition">Gửi</button>
+                </div>
+                <div class="text-xs text-gray-400">Mẹo: Dùng tiền tố $ để truyền HEX, ví dụ: <code class="text-yellow-400">$1A $FF Hello</code></div>
+            </div>
+
+            <!-- Gửi danh sách theo kịch bản (Script List) -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg space-y-3">
+                <h2 class="text-lg font-semibold">Gửi theo danh sách (Script List)</h2>
+                <textarea id="scriptInput" rows="3" class="w-full bg-gray-700 px-3 py-2 rounded border border-gray-600 text-white text-xs font-mono focus:outline-none" placeholder="Mỗi dòng 1 lệnh | Định dạng: Lệnh [delay_ms]&#10;Ví dụ:&#10;LED_ON 500&#10;$1A $2B 1000&#10;RESET 200"></textarea>
+                <div class="flex justify-between items-center">
+                    <span id="scriptStatus" class="text-xs text-gray-400">Trạng thái: Sẵn sàng</span>
+                    <div class="space-x-2">
+                        <button id="startScriptBtn" class="bg-purple-600 hover:bg-purple-700 px-3 py-1.5 rounded font-semibold text-sm transition">Chạy Script</button>
+                        <button id="stopScriptBtn" class="bg-gray-600 hover:bg-gray-700 px-3 py-1.5 rounded font-semibold text-sm transition hidden">Dừng</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HƯỚNG DẪN SỬ DỤNG -->
+        <div class="bg-gray-800 p-5 rounded-lg shadow-lg border border-gray-700 space-y-3 text-sm text-gray-300">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">📖 Hướng dẫn sử dụng nhanh</h2>
+            <ul class="list-disc list-inside space-y-1.5 text-gray-300">
+                <li><strong class="text-white">Kết nối Serial:</strong> Chọn đúng tốc độ BaudRate (khuyên dùng <code class="text-yellow-400">115200</code>), bấm <span class="text-blue-400 font-semibold">Kết nối Serial</span> và chọn cổng COM.</li>
+                <li><strong class="text-white">Vẽ đồ thị & Log RX:</strong> Dữ liệu từ Arduino gửi lên vừa được vẽ đồ thị, vừa hiển thị trực tiếp lên khung Log đen phía dưới.</li>
+                <li><strong class="text-white">Gửi HEX:</strong> Dùng cú pháp <code class="text-yellow-400">$[HEX]</code> (ví dụ: <code class="text-yellow-400">$1A $FF</code>) để truyền mã HEX nguyên thủy.</li>
+            </ul>
+        </div>
+
+        <!-- Khung Debug Log -->
+        <div class="bg-black p-3 rounded font-mono text-xs text-green-400 h-36 overflow-y-auto" id="debugLog">
+            [System] Sẵn sàng...
         </div>
     </div>
 
     <script>
         const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const baudRateSelect = document.getElementById('baudRate');
         const debugLog = document.getElementById('debugLog');
+        
+        const manualInput = document.getElementById('manualInput');
+        const sendManualBtn = document.getElementById('sendManualBtn');
+        
+        const scriptInput = document.getElementById('scriptInput');
+        const startScriptBtn = document.getElementById('startScriptBtn');
+        const stopScriptBtn = document.getElementById('stopScriptBtn');
+        const scriptStatus = document.getElementById('scriptStatus');
 
-        function log(msg) {
+        function log(msg, isRx = false) {
             console.log(msg);
-            debugLog.innerHTML += `<br>[${new Date().toLocaleTimeString()}] ${msg}`;
+            const colorClass = isRx ? 'text-cyan-400' : 'text-green-400';
+            debugLog.innerHTML += `<br><span class="${colorClass}">[${new Date().toLocaleTimeString()}] ${msg}</span>`;
+            // Giới hạn log không bị quá dài gây nặng trình duyệt
+            if (debugLog.childNodes.length > 100) {
+                debugLog.removeChild(debugLog.firstChild);
+            }
             debugLog.scrollTop = debugLog.scrollHeight;
         }
 
-        let port, reader, inputDone;
-        
+        let port = null;
+        let reader = null;
+        let writer = null;
+        let keepReading = false;
+        let isScriptRunning = false;
+
+        // Cấu hình Chart.js tối ưu realtime
         const ctx = document.getElementById('plotterChart').getContext('2d');
         const chart = new Chart(ctx, {
             type: 'line',
@@ -40,75 +116,256 @@
             options: {
                 responsive: true,
                 animation: false,
+                parsing: false,
+                normalized: true,
                 scales: {
-                    x: { display: true },
+                    x: { display: false },
                     y: { beginAtZero: true, suggestedMax: 1023 }
                 },
-                elements: { point: { radius: 0 } }
+                elements: { 
+                    point: { radius: 0 },
+                    line: { tension: 0 }
+                }
             }
         });
 
+        // Kết nối Serial
         connectBtn.addEventListener('click', async () => {
             try {
-                // Kiểm tra xem trình duyệt có hỗ trợ không
                 if (!navigator.serial) {
-                    alert("Trình duyệt này không hỗ trợ Web Serial API! Hãy dùng Google Chrome hoặc Microsoft Edge.");
+                    alert("Trình duyệt không hỗ trợ Web Serial!");
                     return;
                 }
 
                 port = await navigator.serial.requestPort();
-                await port.open({ baudRate: 9600 });
+                const baudRate = parseInt(baudRateSelect.value);
+                await port.open({ baudRate: baudRate });
                 
-                connectBtn.textContent = "Đã kết nối";
-                connectBtn.classList.replace('bg-blue-600', 'bg-green-600');
-                log("Đã mở cổng COM thành công ở tốc độ 9600!");
+                connectBtn.classList.add('hidden');
+                disconnectBtn.classList.remove('hidden');
+                baudRateSelect.disabled = true;
+                log(`Đã kết nối thành công (Baud: ${baudRate})`);
 
-                const textDecoder = new TextDecoderStream();
-                inputDone = port.readable.pipeTo(textDecoder.writable);
-                reader = textDecoder.readable.getReader();
-
+                keepReading = true;
                 readData();
             } catch (error) {
                 log("Lỗi kết nối: " + error);
             }
         });
 
-        async function readData() {
-            let buffer = "";
-            try {
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-                    buffer += value;
-                    let lines = buffer.split("\n");
-                    buffer = lines.pop(); 
+        // Ngắt kết nối an toàn (Khắc phục lỗi port is already open)
+        disconnectBtn.addEventListener('click', async () => {
+            await closeConnection();
+        });
 
-                    for (let line of lines) {
-                        processLine(line.trim());
-                    }
+        async function closeConnection() {
+            keepReading = false;
+            isScriptRunning = false;
+            
+            try {
+                if (reader) {
+                    await reader.cancel();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+
+            try {
+                if (port) {
+                    await port.close();
                 }
             } catch (error) {
-                log("Lỗi đọc dữ liệu stream: " + error);
+                log("Lỗi khi đóng cổng: " + error);
+            }
+
+            port = null;
+            reader = null;
+            writer = null;
+
+            disconnectBtn.classList.add('hidden');
+            connectBtn.classList.remove('hidden');
+            baudRateSelect.disabled = false;
+            log("Đã ngắt kết nối cổng COM.");
+        }
+
+        // Vòng lặp đọc dữ liệu chuẩn xử lý lock stream
+        async function readData() {
+            while (port && port.readable && keepReading) {
+                const textDecoder = new TextDecoderStream();
+                const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+                reader = textDecoder.readable.getReader();
+
+                let buffer = "";
+                try {
+                    while (keepReading) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        if (value) {
+                            buffer += value;
+                            let lines = buffer.split("\n");
+                            buffer = lines.pop(); 
+
+                            for (let line of lines) {
+                                let cleanLine = line.trim();
+                                if (cleanLine) {
+                                    log(`RX: ${cleanLine}`, true); // In dữ liệu Arduino gửi lên màu xanh dương
+                                    processLine(cleanLine);
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    if (keepReading) {
+                        console.error("Lỗi đọc stream: ", error);
+                    }
+                } finally {
+                    try {
+                        reader.releaseLock();
+                    } catch (e) {}
+                    
+                    try {
+                        await readableStreamClosed.catch(() => {}); 
+                    } catch (e) {}
+                }
             }
         }
 
+        // Hàm phân tích cú pháp HEX ($1A)
+        function parseCommandToUint8Array(inputStr) {
+            let tokens = inputStr.trim().split(/\s+/);
+            let bytes = [];
+            let textPart = [];
+
+            for (let token of tokens) {
+                if (token.startsWith('$') && token.length === 3) {
+                    if (textPart.length > 0) {
+                        let encoder = new TextEncoder();
+                        bytes.push(...encoder.encode(textPart.join(' ') + ' '));
+                        textPart = [];
+                    }
+                    let hexVal = parseInt(token.substring(1), 16);
+                    if (!isNaN(hexVal)) {
+                        bytes.push(hexVal);
+                    }
+                } else {
+                    textPart.push(token);
+                }
+            }
+
+            if (textPart.length > 0) {
+                let encoder = new TextEncoder();
+                bytes.push(...encoder.encode(textPart.join(' ') + '\n'));
+            }
+
+            return new Uint8Array(bytes);
+        }
+
+        // Gửi dữ liệu thủ công
+        async function sendDataString(str) {
+            if (!port || !port.writable) {
+                alert("Chưa kết nối cổng Serial!");
+                return;
+            }
+            try {
+                writer = port.writable.getWriter();
+                const dataBytes = parseCommandToUint8Array(str);
+                await writer.write(dataBytes);
+                writer.releaseLock();
+                log(`TX: ${str}`);
+            } catch (error) {
+                log("Lỗi gửi dữ liệu: " + error);
+                if (writer) {
+                    try { writer.releaseLock(); } catch (e) {}
+                }
+            }
+        }
+
+        sendManualBtn.addEventListener('click', () => {
+            if (manualInput.value) {
+                sendDataString(manualInput.value);
+                manualInput.value = "";
+            }
+        });
+
+        manualInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && manualInput.value) {
+                sendDataString(manualInput.value);
+                manualInput.value = "";
+            }
+        });
+
+        // Gửi script theo danh sách
+        startScriptBtn.addEventListener('click', async () => {
+            if (!port || !port.writable) {
+                alert("Chưa kết nối cổng Serial!");
+                return;
+            }
+
+            const scriptContent = scriptInput.value.trim();
+            if (!scriptContent) {
+                alert("Vui lòng nhập danh sách lệnh kịch bản!");
+                return;
+            }
+
+            const lines = scriptContent.split('\n');
+            isScriptRunning = true;
+            startScriptBtn.classList.add('hidden');
+            stopScriptBtn.classList.remove('hidden');
+
+            for (let i = 0; i < lines.length; i++) {
+                if (!isScriptRunning) break;
+                
+                let line = lines[i].trim();
+                if (!line || line.startsWith('#')) continue; 
+
+                let lastSpaceIdx = line.lastIndexOf(' ');
+                let delayMs = 1000; 
+                let cmdPart = line;
+
+                if (lastSpaceIdx !== -1) {
+                    let potentialDelay = parseInt(line.substring(lastSpaceIdx + 1));
+                    if (!isNaN(potentialDelay)) {
+                        delayMs = potentialDelay;
+                        cmdPart = line.substring(0, lastSpaceIdx);
+                    }
+                }
+
+                scriptStatus.textContent = `Trạng thái: Đang chạy dòng ${i + 1}/${lines.length}`;
+                await sendDataString(cmdPart);
+
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+
+            isScriptRunning = false;
+            startScriptBtn.classList.remove('hidden');
+            stopScriptBtn.classList.add('hidden');
+            scriptStatus.textContent = "Trạng thái: Hoàn thành kịch bản!";
+        });
+
+        stopScriptBtn.addEventListener('click', () => {
+            isScriptRunning = false;
+            startScriptBtn.classList.remove('hidden');
+            stopScriptBtn.classList.add('hidden');
+            scriptStatus.textContent = "Trạng thái: Đã dừng kịch bản.";
+        });
+
+        // Xử lý vẽ biểu đồ realtime
         let timeIndex = 0;
         function processLine(line) {
-            if (!line) return;
-            // log("Nhận dòng: " + line); // Bỏ comment dòng này nếu muốn xem data thô liên tục đổ về
-            
             const values = line.split('\t').map(Number);
+            // Nếu dòng không phải số (ví dụ chuỗi text thông báo từ Arduino), bỏ qua không vẽ chart để đỡ lỗi
+            if (values.some(isNaN)) return;
 
             if (chart.data.datasets.length === 0) {
                 values.forEach((_, index) => {
                     chart.data.datasets.push({
                         label: `A${index}`,
                         data: [],
-                        borderWidth: 1.5,
-                        borderColor: `hsl(${index * (360 / Math.max(values.length, 1))}, 80%, 60%)`
+                        borderWidth: 1,
+                        borderColor: `hsl(${index * (360 / Math.max(values.length, 1))}, 70%, 50%)`
                     });
                 });
-                log(`Đã khởi tạo ${values.length} kênh hiển thị.`);
+                log(`Đã khởi tạo biểu đồ với ${values.length} kênh.`);
             }
 
             chart.data.labels.push(timeIndex++);
