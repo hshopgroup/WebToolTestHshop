@@ -337,10 +337,15 @@
     </style>
 </head>
 <body>
-
     <header>
         <div class="logo-area">
             <h1>Web Serial Plotter & Terminal</h1>
+        </div>
+        <div class="view-toggles" style="display: flex; gap: 15px; margin-left: 20px; flex: 1;">
+            <label><input type="checkbox" id="cbViewTerminal" checked> Terminal</label>
+            <label><input type="checkbox" id="cbViewScript" checked> Script</label>
+            <label><input type="checkbox" id="cbViewPlotter" checked> Plotter</label>
+            <label><input type="checkbox" id="cbViewGuide" checked> Guide</label>
         </div>
         <div class="controls">
             <select id="baudRate">
@@ -364,7 +369,7 @@
                     <div class="header-actions">
                         <label><input type="checkbox" id="showTime"> Time</label>
                         <label><input type="checkbox" id="showHex" checked> HEX</label>
-                        <label><input type="checkbox" id="autoScroll" id="cbAutoScroll" checked> Auto Scroll</label>
+                        <label><input type="checkbox" id="autoScroll" checked> Auto Scroll</label>
                         <button class="btn-secondary small" onclick="resetCounters()">Reset</button>
                         <button class="btn-primary small" onclick="exportLog('xlsx')">XLSX</button>
                         <button class="btn-secondary small" onclick="exportLog('csv')">CSV</button>
@@ -399,11 +404,17 @@
             <!-- Script Card -->
             <div class="card script-container" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
                 <div class="card-header">
-                    <span>Script List</span>
+                    <span style="display: flex; align-items: center; gap: 5px; flex-wrap: nowrap;">
+                        Script List
+                        <select id="scriptSheetSelector" style="margin-left: 5px; width: 150px; max-width: 200px; padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-color); color: var(--text-color); outline: none;"></select>
+                        <button class="btn-secondary small" id="btnAddSheet" style="padding: 2px 8px; font-weight: bold;" title="Thêm Sheet mới">+</button>
+                        <button class="btn-danger small" id="btnDeleteSheet" style="padding: 2px 8px; font-weight: bold;" title="Xóa Sheet hiện tại">✕</button>
+                    </span>
                     <div class="header-actions">
-                        <input type="file" id="scriptFileInput" accept=".txt,.csv" onchange="importScript(event)">
+                        <input type="file" id="scriptFileInput" accept=".txt,.csv,.xlsx" onchange="importScript(event)">
                         <button class="btn-secondary small" onclick="document.getElementById('scriptFileInput').click()">Import</button>
-                        <button class="btn-secondary small" onclick="exportScript('txt')">Export</button>
+                        <button class="btn-primary small" onclick="exportScript('xlsx')">Export XLSX</button>
+                        <button class="btn-secondary small" onclick="exportScript('txt')">TXT</button>
                     </div>
                 </div>
                 <textarea class="script-area" id="scriptArea" style="flex: 1; min-height: 0;" placeholder="# Định dạng: Lệnh||Delay_ms&#10;$1A 2B||1000&#10;HELLO||500"></textarea>
@@ -445,14 +456,18 @@
                     <span>Hướng dẫn sử dụng</span>
                 </div>
                 <div style="overflow-y: auto; padding-right: 10px;">
-                    <h3>1. Vẽ biểu đồ chuyên nghiệp</h3>
-                    <p>- <strong>Tự động nhận diện:</strong> Phân tách các kênh bằng <code>\t</code> và xuống dòng <code>\n</code>.</p>
-                    <p>- <strong>Thu phóng (Zoom/Pan):</strong> Sử dụng <strong>Con lăn chuột</strong> (Mouse Wheel) để phóng to/thu nhỏ đồ thị. <strong>Giữ chuột trái và kéo</strong> để di chuyển (Pan) qua lại giữa các vùng dữ liệu.</p>
-                    <p>- <strong>Hiển thị:</strong> Chọn 'All' để xem toàn bộ lịch sử (có thể gây lag nếu chạy quá lâu), hoặc 'Range' để chỉ hiển thị N mẫu gần nhất. Nút <strong>Thiết lập Kênh</strong> cho phép đổi tên và màu sắc từng kênh hiển thị.</p>
-                    
-                    <h3>2. Xuất/Nhập dữ liệu</h3>
-                    <p>- <strong>Terminal:</strong> Lưu lịch sử nhận/gửi thành file TXT hoặc CSV dễ dàng cho việc phân tích Excel.</p>
-                    <p>- <strong>Script List:</strong> Import/Export kịch bản giúp bạn tái sử dụng nhiều bộ lệnh (hỗ trợ .txt và .csv).</p>
+                    <h3>1. Hệ thống Dashboard (Đa màn hình)</h3>
+                    <p>- <strong>Chia sẻ cổng Serial:</strong> Mở <code>Dashboard.html</code> để hiển thị cùng lúc Terminal và nhiều Plotter độc lập. Bạn chỉ cần <strong>Connect</strong> ở 1 cửa sổ bất kỳ, dữ liệu sẽ tự động đồng bộ sang các cửa sổ còn lại.</p>
+                    <p>- <strong>Tùy biến không gian:</strong> Sử dụng các nút Checkbox ở thanh tiêu đề để ẩn/hiện từng khu vực chức năng. Kéo thả các thanh chia dọc/ngang để căn chỉnh kích thước.</p>
+
+                    <h3>2. Quản lý kịch bản đa Sheet (Script List)</h3>
+                    <p>- <strong>Nhiều tập lệnh:</strong> Bạn có thể tạo, đổi tên, xóa nhiều Sheet lệnh khác nhau trực tiếp trên Web. Bấm <code>[+]</code> để thêm Sheet.</p>
+                    <p>- <strong>Tương thích Excel:</strong> Các lệnh được phân tách bằng <code>||</code> giữa Lệnh và thời gian trễ. Bạn có thể xuất/nhập file <code>.xlsx</code> nhiều Sheet để tiện quản lý hàng trăm lệnh test cho các mạch khác nhau.</p>
+
+                    <h3>3. Phân tích đồ thị & Terminal</h3>
+                    <p>- <strong>Bảo vệ chống treo:</strong> Khi bộ nhớ đầy (vd: >50,000 dòng log), hệ thống tự động đẩy dữ liệu sang file <code>.xlsx</code> và xóa bộ nhớ đệm nếu bạn cắm máy chạy lâu dài.</p>
+                    <p>- <strong>Thu phóng (Zoom/Pan):</strong> Dùng lăn chuột để phóng to/thu nhỏ đồ thị Plotter. Giữ chuột trái kéo để xem lại dữ liệu cũ.</p>
+                    <p>- <strong>Gửi chèn HEX:</strong> Trong Terminal hoặc Script, bạn có thể gửi trộn lẫn mã ASCII và HEX bằng cú pháp <code>&lt;1A 2B&gt;</code> hoặc <code>\x1A</code> hoặc tiền tố <code>$1A</code>. Ví dụ: <code>Lenh&lt;0D 0A&gt;</code> sẽ gửi chữ "Lenh" kèm mã xuống dòng.</p>
                 </div>
             </div>
         </div>
@@ -516,7 +531,10 @@
         if (hideParam) {
             const hides = hideParam.split(',');
             if (hides.includes('terminal')) document.querySelector('.terminal-container').style.display = 'none';
-            if (hides.includes('script')) document.querySelector('.script-container').style.display = 'none';
+            if (hides.includes('script')) {
+                document.querySelector('.script-container').style.display = 'none';
+                if (document.getElementById('h-resizer')) document.getElementById('h-resizer').style.display = 'none';
+            }
             if (hides.includes('plotter')) document.querySelector('.chart-container').style.display = 'none';
             if (hides.includes('guide')) document.querySelector('.guide-container').style.display = 'none';
             
@@ -533,10 +551,72 @@
                 if (controlsEl) controlsEl.style.display = 'none';
             }
         }
+        
+        // Hide view toggles if in iframe (Dashboard will handle it)
+        if (window.parent !== window) {
+            const vt = document.querySelector('.view-toggles');
+            if (vt) vt.style.display = 'none';
+        }
+        
+        let lastLeftWidth = '450px';
+        function toggleStandaloneView(cbId, containerSelector) {
+            const cb = document.getElementById(cbId);
+            if (cb) {
+                cb.addEventListener('change', (e) => {
+                    const el = document.querySelector(containerSelector);
+                    if (el) el.style.display = e.target.checked ? 'flex' : 'none';
+                    
+                    // Logic xử lý ẩn/hiện cột và resizer
+                    const leftPanel = document.querySelector('.left-panel');
+                    const rightPanel = document.querySelector('.right-panel');
+                    const termChecked = document.getElementById('cbViewTerminal').checked;
+                    const scriptChecked = document.getElementById('cbViewScript').checked;
+                    const plotChecked = document.getElementById('cbViewPlotter').checked;
+                    const guideChecked = document.getElementById('cbViewGuide').checked;
+                    
+                    const hResizer = document.getElementById('h-resizer');
+                    if (hResizer) hResizer.style.display = (termChecked && scriptChecked) ? 'block' : 'none';
+                    
+                    if (termChecked || scriptChecked) {
+                        leftPanel.style.display = 'flex';
+                        if (plotChecked || guideChecked) {
+                            leftPanel.style.flex = 'none';
+                            leftPanel.style.width = lastLeftWidth;
+                        } else {
+                            if (leftPanel.style.width && leftPanel.style.width !== '100%') {
+                                lastLeftWidth = leftPanel.style.width;
+                            }
+                            leftPanel.style.flex = '1';
+                            leftPanel.style.width = '100%';
+                        }
+                    } else {
+                        leftPanel.style.display = 'none';
+                    }
+                    
+                    rightPanel.style.display = (plotChecked || guideChecked) ? 'flex' : 'none';
+                    
+                    const vResizer = document.getElementById('v-resizer');
+                    if (vResizer) {
+                        vResizer.style.display = (leftPanel.style.display !== 'none' && rightPanel.style.display !== 'none') ? 'block' : 'none';
+                    }
+                });
+            }
+        }
+        toggleStandaloneView('cbViewTerminal', '.terminal-container');
+        toggleStandaloneView('cbViewScript', '.script-container');
+        toggleStandaloneView('cbViewPlotter', '.chart-container');
+        toggleStandaloneView('cbViewGuide', '.guide-container');
 
         // --- Iframe Bus Logic (Share Serial) ---
         window.addEventListener('message', (e) => {
             if (!e.data || !e.data.type) return;
+            
+            if (e.data.type === 'TOGGLE_SCRIPT') {
+                document.querySelector('.script-container').style.display = e.data.show ? 'flex' : 'none';
+                const hResizer = document.getElementById('h-resizer');
+                if (hResizer) hResizer.style.display = e.data.show ? 'block' : 'none';
+                return;
+            }
             
             if (e.data.type === 'SERIAL_RX') {
                 if (!port) processSerialData(e.data.payload);
@@ -660,46 +740,85 @@
             }
             writer = port.writable.getWriter();
             try {
-                if (cmd.startsWith('$')) {
-                    const hexStr = cmd.substring(1).replace(/\s/g, '');
-                    const bytes = [];
-                    for(let i = 0; i < hexStr.length; i+=2) {
-                        bytes.push(parseInt(hexStr.substring(i, i+2), 16));
-                    }
-                    const dataObj = new Uint8Array(bytes);
-                    updateCounters(dataObj.length, 0);
-                    await writer.write(dataObj);
-                    
-                    const hexLogStr = Array.from(dataObj).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-                    logTx(`[HEX] ${hexLogStr}`, false);
-                    logTx(hexLogStr, true);
+                let finalCmd = cmd;
+                if (isScript) {
+                    finalCmd = finalCmd.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t');
                 } else {
-                    let finalCmd = cmd;
-                    // Nếu là kịch bản, chuyển đổi các ký tự escape \n \r \t thành ký tự thực
-                    if (isScript) {
-                        finalCmd = finalCmd.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t');
+                    const ending = document.getElementById('lineEnding').value;
+                    if (ending === 'cr') finalCmd += '\r';
+                    else if (ending === 'lf') finalCmd += '\n';
+                    else if (ending === 'crlf') finalCmd += '\r\n';
+                }
+
+                // Parser hỗ trợ chèn HEX vào chuỗi bằng cú pháp <1A 2B> hoặc \x1A hoặc $1A
+                let bytes = [];
+                let encoder = new TextEncoder();
+                let i = 0;
+                while (i < finalCmd.length) {
+                    // Cú pháp <1A 2B>
+                    if (finalCmd[i] === '<') {
+                        let endIdx = finalCmd.indexOf('>', i);
+                        if (endIdx !== -1) {
+                            let inside = finalCmd.substring(i + 1, endIdx);
+                            if (/^[0-9a-fA-F\s]+$/.test(inside) && inside.trim().length > 0) {
+                                let pairs = inside.match(/[0-9a-fA-F]{2}/g);
+                                if (pairs) {
+                                    for (let p of pairs) bytes.push(parseInt(p, 16));
+                                }
+                                i = endIdx + 1;
+                                continue;
+                            }
+                        }
                     }
                     
-                    // Thêm line ending từ ComboBox (chỉ dành cho Terminal)
-                    if (!isScript) {
-                        const ending = document.getElementById('lineEnding').value;
-                        if (ending === 'cr') finalCmd += '\r';
-                        else if (ending === 'lf') finalCmd += '\n';
-                        else if (ending === 'crlf') finalCmd += '\r\n';
+                    // Cú pháp \x1A
+                    if (finalCmd.substring(i, i+2) === '\\x') {
+                        let hexPart = finalCmd.substring(i+2, i+4);
+                        if (/^[0-9a-fA-F]{2}$/.test(hexPart)) {
+                            bytes.push(parseInt(hexPart, 16));
+                            i += 4;
+                            continue;
+                        }
                     }
 
-                    const encoder = new TextEncoder();
-                    const dataObj = encoder.encode(finalCmd);
-                    updateCounters(dataObj.length, 0);
-                    await writer.write(dataObj);
+                    // Cú pháp $1A 2B (Cũ)
+                    if (finalCmd[i] === '$') {
+                        let match = finalCmd.substring(i).match(/^\$([0-9a-fA-F]{2}(?:[\s]*[0-9a-fA-F]{2})*)/);
+                        if (match) {
+                            let hexPart = match[1];
+                            let pairs = hexPart.match(/[0-9a-fA-F]{2}/g);
+                            for (let p of pairs) {
+                                bytes.push(parseInt(p, 16));
+                            }
+                            i += match[0].length;
+                            continue;
+                        }
+                    }
                     
-                    // Hiển thị ra log với các ký tự ẩn được làm rõ
-                    let logStr = finalCmd.replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
-                    logTx(logStr, false); // Ghi ASCII
-                    
-                    const hexLogStr = Array.from(dataObj).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-                    logTx(hexLogStr, true); // Ghi HEX
+                    let encoded = encoder.encode(finalCmd[i]);
+                    for(let b of encoded) bytes.push(b);
+                    i++;
                 }
+                
+                const dataObj = new Uint8Array(bytes);
+                updateCounters(dataObj.length, 0);
+                await writer.write(dataObj);
+                
+                // Hiển thị ra log với các ký tự ẩn được làm rõ
+                let hexLogStr = Array.from(dataObj).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                
+                let asciiLogStr = "";
+                for (let b of dataObj) {
+                    if (b === 0x0D) asciiLogStr += "\\r";
+                    else if (b === 0x0A) asciiLogStr += "\\n";
+                    else if (b === 0x09) asciiLogStr += "\\t";
+                    else if (b >= 32 && b <= 126) asciiLogStr += String.fromCharCode(b);
+                    else asciiLogStr += `[${b.toString(16).padStart(2, '0').toUpperCase()}]`;
+                }
+
+                logTx(asciiLogStr, false); // Ghi ASCII
+                logTx(hexLogStr, true); // Ghi HEX
+                
             } catch (error) {
                 logSys("Lỗi gửi dữ liệu: " + error.message, true);
             } finally {
@@ -910,21 +1029,148 @@
 
         btnStopScript.addEventListener('click', () => { stopScriptFlag = true; });
 
+        // --- Script Workbook Management ---
+        let scriptWorkbook = { "Sheet1": scriptArea.value };
+        let currentScriptSheet = "Sheet1";
+        const scriptSheetSelector = document.getElementById('scriptSheetSelector');
+        
+        function updateScriptSheetUI() {
+            scriptSheetSelector.innerHTML = '';
+            for (let sheetName in scriptWorkbook) {
+                const opt = document.createElement('option');
+                opt.value = sheetName;
+                opt.textContent = sheetName;
+                scriptSheetSelector.appendChild(opt);
+            }
+            scriptSheetSelector.value = currentScriptSheet;
+            scriptArea.value = scriptWorkbook[currentScriptSheet];
+        }
+        
+        scriptSheetSelector.addEventListener('change', (e) => {
+            currentScriptSheet = e.target.value;
+            scriptArea.value = scriptWorkbook[currentScriptSheet];
+        });
+        
+        scriptArea.addEventListener('input', () => {
+            scriptWorkbook[currentScriptSheet] = scriptArea.value;
+        });
+        
+        document.getElementById('btnAddSheet').addEventListener('click', () => {
+            const name = prompt("Nhập tên Sheet mới:", `Sheet${Object.keys(scriptWorkbook).length + 1}`);
+            if (name && !scriptWorkbook[name]) {
+                scriptWorkbook[name] = "";
+                currentScriptSheet = name;
+                updateScriptSheetUI();
+            } else if (scriptWorkbook[name]) {
+                alert("Tên Sheet đã tồn tại!");
+            }
+        });
+        
+        document.getElementById('btnDeleteSheet').addEventListener('click', () => {
+            const sheets = Object.keys(scriptWorkbook);
+            if (sheets.length === 1) {
+                return alert("Không thể xóa Sheet duy nhất!");
+            }
+            if (confirm(`Bạn có chắc chắn muốn xóa Sheet '${currentScriptSheet}'?`)) {
+                delete scriptWorkbook[currentScriptSheet];
+                currentScriptSheet = Object.keys(scriptWorkbook)[0];
+                updateScriptSheetUI();
+            }
+        });
+        
+        // Khởi tạo giao diện Sheet lúc load
+        updateScriptSheetUI();
+
         function exportScript(type) {
-            const text = scriptArea.value;
-            const blob = new Blob([text], { type: 'text/plain' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `script_${new Date().getTime()}.${type}`;
-            a.click();
+            if (type === 'xlsx') {
+                const wb = XLSX.utils.book_new();
+                for (let sheetName in scriptWorkbook) {
+                    const text = scriptWorkbook[sheetName];
+                    const lines = text.split('\n');
+                    const arr2D = [["Command", "Delay (ms)", "Description"]];
+                    
+                    let lastDesc = "";
+                    for (let i = 0; i < lines.length; i++) {
+                        let line = lines[i].trim();
+                        if (!line) continue;
+                        if (line.startsWith('#')) {
+                            lastDesc = line.substring(1).trim();
+                        } else {
+                            let cmd = line;
+                            let delay = 500;
+                            if (line.includes('||')) {
+                                const parts = line.split('||');
+                                cmd = parts[0];
+                                delay = parseInt(parts[1].trim()) || 500;
+                            }
+                            arr2D.push([cmd, delay, lastDesc]);
+                            lastDesc = ""; // reset cho dòng sau
+                        }
+                    }
+                    const ws = XLSX.utils.aoa_to_sheet(arr2D);
+                    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                }
+                XLSX.writeFile(wb, `Script_Workbook_${new Date().getTime()}.xlsx`);
+            } else if (type === 'txt') {
+                const text = scriptWorkbook[currentScriptSheet];
+                const blob = new Blob([text], { type: 'text/plain' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `script_${currentScriptSheet}_${new Date().getTime()}.${type}`;
+                a.click();
+            }
         }
 
         function importScript(event) {
             const file = event.target.files[0];
             if (!file) return;
+            
             const reader = new FileReader();
-            reader.onload = e => { scriptArea.value = e.target.result; };
-            reader.readAsText(file);
+            reader.onload = e => { 
+                const data = e.target.result;
+                if (file.name.endsWith('.xlsx')) {
+                    const wb = XLSX.read(data, {type: 'array'});
+                    scriptWorkbook = {};
+                    
+                    wb.SheetNames.forEach(sheetName => {
+                        const ws = wb.Sheets[sheetName];
+                        const arr2D = XLSX.utils.sheet_to_json(ws, {header: 1});
+                        let scriptText = "";
+                        
+                        // Bỏ qua dòng tiêu đề (index 0)
+                        for (let i = 1; i < arr2D.length; i++) {
+                            const row = arr2D[i];
+                            if (!row || row.length === 0) continue;
+                            const cmd = row[0] || "";
+                            const delay = row[1] !== undefined ? row[1] : 500;
+                            const desc = row[2] || "";
+                            
+                            if (cmd) {
+                                if (desc) scriptText += `# ${desc}\n`;
+                                scriptText += `${cmd}||${delay}\n`;
+                            }
+                        }
+                        scriptWorkbook[sheetName] = scriptText.trim();
+                    });
+                    
+                    if (Object.keys(scriptWorkbook).length === 0) {
+                        scriptWorkbook = { "Sheet1": "" };
+                    }
+                    currentScriptSheet = Object.keys(scriptWorkbook)[0];
+                    updateScriptSheetUI();
+                    logSys(`Đã nạp file Excel chứa ${Object.keys(scriptWorkbook).length} tập lệnh.`);
+                } else {
+                    // Đọc TXT / CSV thông thường vào Sheet hiện tại
+                    scriptWorkbook[currentScriptSheet] = new TextDecoder("utf-8").decode(data);
+                    updateScriptSheetUI();
+                }
+            };
+            
+            if (file.name.endsWith('.xlsx')) {
+                reader.readAsArrayBuffer(file);
+            } else {
+                reader.readAsArrayBuffer(file); // Giữ nguyên array buffer và decode cho an toàn tiếng Việt
+            }
             event.target.value = ''; // Reset
         }
 

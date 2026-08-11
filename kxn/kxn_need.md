@@ -47,3 +47,19 @@
   - *Khắc phục:* Ẩn toàn bộ nút Connect & chọn Baud Rate (bằng tham số `hide=controls`) ở các màn hình Plotter con. Dashboard chỉ duy trì 1 nút Connect duy nhất tại Terminal.
 - **Lỗi phải kết nối lại thủ công khi đổi Baud Rate:**
   - *Khắc phục:* Bắt sự kiện thay đổi (`change`) ở menu Baud, tự động ngắt kết nối và gọi lại kết nối mới với cờ `reusePort = true` để giữ nguyên Port đã xin phép từ trình duyệt mà không cần hiện Popup lại.
+
+## 5. Các tính năng mở rộng đã hoàn thành (Mới cập nhật)
+- **Bảo vệ chống treo trình duyệt (Anti-freeze):**
+  - Giới hạn DOM hiển thị tại 1000 phần tử cho Plotter và Terminal.
+  - Tự động lưu (Auto-save) 50,000 dòng log vào file Excel và giải phóng RAM để hệ thống có thể chạy giám sát 24/7 không giật lag.
+- **Xuất/Nhập dữ liệu chuẩn Excel (XLSX):**
+  - Tích hợp thư viện `SheetJS`.
+  - Thay thế toàn bộ tính năng export mặc định sang định dạng `xlsx` (bao gồm Terminal, Plotter và Script List).
+- **Quản lý kịch bản đa Sheet (Multi-Sheet Script):**
+  - Chuyển Script List thành một phần mềm quản lý kịch bản thu nhỏ.
+  - Cho phép tạo, xóa, chuyển đổi các Sheet lệnh trực tiếp trên Web.
+  - Hỗ trợ Import/Export file Excel chứa nhiều Sheet với chuẩn 3 cột (Command - Delay - Description).
+- **Tuỳ biến Layout linh hoạt:**
+  - Thêm hệ thống Checkbox bật/tắt hiển thị từng module (Terminal, Script, Plotter, Guide).
+  - Tự động thay đổi kích thước và đẩy Full-width cho Terminal khi Plotter bị ẩn.
+  - Tích hợp bộ điều khiển Checkbox tổng lên thanh điều hướng của `Dashboard.html`.

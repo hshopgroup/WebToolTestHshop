@@ -90,6 +90,7 @@
         <h1>Trạm điều khiển trung tâm (Dashboard)</h1>
         <div class="toggle-group">
             <label><input type="checkbox" checked onchange="toggleView('terminal-col')"> Terminal</label>
+            <label><input type="checkbox" id="cbScript" checked onchange="toggleScript()"> Script List</label>
             <label><input type="checkbox" checked onchange="toggleView('plotter1')"> Plotter 1</label>
             <label><input type="checkbox" checked onchange="toggleView('plotter2')"> Plotter 2</label>
             <span style="color: #94a3b8; font-size: 0.8rem; margin-left: 20px;">* Chỉ cần Connect ở 1 cửa sổ, dữ liệu sẽ tự đồng bộ.</span>
@@ -134,6 +135,14 @@
             } else {
                 if (plotterCol) plotterCol.style.display = 'flex';
                 if (vResizer) vResizer.style.display = 'block';
+            }
+        }
+
+        function toggleScript() {
+            const isChecked = document.getElementById('cbScript').checked;
+            const iframe = document.querySelector('.terminal-col iframe');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({ type: 'TOGGLE_SCRIPT', show: isChecked }, '*');
             }
         }
 
