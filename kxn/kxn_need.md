@@ -21,3 +21,29 @@
   - Hỗ trợ dòng chú thích (bắt đầu bằng `#`).
 - **Tài liệu & Hướng dẫn:**
   - Tích hợp sẵn phần Hướng dẫn sử dụng trực quan ngay trên giao diện web.
+
+## 3. Quá trình nâng cấp & Tái cấu trúc (Monolithic + Iframe Bus)
+- **Kiến trúc đa cửa sổ (Dashboard):**
+  - **Vấn đề:** Trình duyệt chỉ cho phép 1 thẻ mở kết nối Web Serial. Khi muốn mở nhiều màn hình Plotter cùng lúc, trình duyệt sẽ báo lỗi cổng COM đang bận.
+  - **Giải pháp:** Giữ nguyên 1 file `Web_SerialPloter_Anti.html` duy nhất. Dùng tham số trên URL (ví dụ: `?hide=plotter`) để ẩn các thành phần không mong muốn. Mở nhiều Iframe trên trang `Dashboard.html` và sử dụng `window.postMessage` làm hệ thống "Iframe Bus" để chia sẻ dữ liệu Serial từ thẻ Master sang các thẻ Slave.
+- **Tối ưu Bảng ghi chú (Legend):**
+  - Chuyển tính năng bật/tắt hiển thị từng kênh vào Modal "Thiết lập kênh" để mở rộng tối đa không gian vẽ biểu đồ.
+- **Nâng cấp Terminal (Phong cách IDE chuyên nghiệp):**
+  - **Mốc thời gian (Timestamp):** Thêm ô Checkbox `[x] Time` để gắn nhãn thời gian thực `[HH:MM:SS.ms]` vào từng dòng log.
+  - **Cửa sổ kép (Dual View):** Hiển thị song song 2 cửa sổ chữ (ASCII) và mã (HEX) của dữ liệu gửi/nhận. 
+  - **Bộ đếm (Counters):** Thêm thanh thống kê tổng số byte TX và RX cùng nút Reset ở tiêu đề Terminal.
+- **Trải nghiệm kéo thả (Resizer / Splitter):**
+  - **Splitter Dọc:** Nằm giữa bảng điều khiển bên trái (Terminal & Script) và Plotter, hoặc giữa các Iframe trong Dashboard.
+  - **Splitter Ngang:** Nằm giữa Terminal và Script List. Khung chứa Script List luôn được cố định nằm dưới Terminal.
+
+## 4. Các lỗi (Bugs) đã phát hiện và xử lý
+- **Lỗi không kéo lên được thanh Splitter ngang:**
+  - *Nguyên nhân:* Thẻ `<textarea>` của Script List giới hạn chiều cao tối thiểu, làm cho việc kéo thanh Splitter xuống sâu bị đẩy tràn ra ngoài khung, gây kẹt logic tính toán.
+  - *Khắc phục:* Bổ sung CSS `flex: 1; min-height: 0;` cho khung Script List và thêm logic ép khung (Clamping) bằng biến giới hạn (min/max) vào sự kiện `mousemove`.
+- **Lỗi Terminal không lấp đầy chiều rộng khi chạy độc lập trong Dashboard:**
+  - *Nguyên nhân:* Kích thước của Terminal bị khóa cứng ở mức `width: 450px`.
+  - *Khắc phục:* Giảm `min-width` xuống `250px`. Thêm logic Javascript tự động chỉnh `width: 100%` cho khung `left-panel` khi tham số URL yêu cầu ẩn toàn bộ Plotter.
+- **Tránh nhầm lẫn thao tác Connect trên Dashboard:**
+  - *Khắc phục:* Ẩn toàn bộ nút Connect & chọn Baud Rate (bằng tham số `hide=controls`) ở các màn hình Plotter con. Dashboard chỉ duy trì 1 nút Connect duy nhất tại Terminal.
+- **Lỗi phải kết nối lại thủ công khi đổi Baud Rate:**
+  - *Khắc phục:* Bắt sự kiện thay đổi (`change`) ở menu Baud, tự động ngắt kết nối và gọi lại kết nối mới với cờ `reusePort = true` để giữ nguyên Port đã xin phép từ trình duyệt mà không cần hiện Popup lại.

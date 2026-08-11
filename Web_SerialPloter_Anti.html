@@ -523,6 +523,10 @@
                 const vr = document.getElementById('v-resizer');
                 if (vr) vr.style.display = 'none';
             }
+            if (hides.includes('controls')) {
+                const controlsEl = document.querySelector('.controls');
+                if (controlsEl) controlsEl.style.display = 'none';
+            }
         }
 
         // --- Iframe Bus Logic (Share Serial) ---
@@ -565,10 +569,20 @@
             else await connectSerial();
         });
 
-        async function connectSerial() {
+        document.getElementById('baudRate').addEventListener('change', async () => {
+            if (isConnected && port) {
+                logSys("Baud rate thay đổi. Đang kết nối lại...");
+                await disconnectSerial();
+                await connectSerial(true);
+            }
+        });
+
+        async function connectSerial(reusePort = false) {
             try {
                 const baudRate = parseInt(document.getElementById('baudRate').value);
-                port = await navigator.serial.requestPort();
+                if (!reusePort || !port) {
+                    port = await navigator.serial.requestPort();
+                }
                 await port.open({ baudRate });
                 
                 isConnected = true;
