@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Serial Plotter & Terminal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js & Zoom Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --text-color: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #10b981;
+            --border: #334155;
+            --rx-color: #60a5fa;
+            --tx-color: #f472b6;
+            --border-radius: 12px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 10;
+        }
+
+        .logo-area h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        select, button, input[type="text"], input[type="number"] {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-color);
+            color: var(--text-color);
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        button {
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            border: none;
+        }
+        
+        button.small {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            border-radius: 4px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover { background: var(--primary-hover); }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        .btn-danger:hover { background: var(--danger-hover); }
+
+        .btn-secondary {
+            background: var(--border);
+            color: var(--text-color);
+        }
+        .btn-secondary:hover { background: #475569; }
+
+        /* Main Layout */
+        main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            padding: 1.5rem;
+            gap: 1.5rem;
+        }
+
+        /* Left Panel */
+        .left-panel {
+            width: 450px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            min-width: 400px;
+        }
+
+        .card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--border-radius);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow);
+        }
+
+        .card-header {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--text-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: normal;
+        }
+
+        /* Terminal */
+        .terminal-container { flex: 1; }
+
+        .terminal-output {
+            flex: 1;
+            background: #000;
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+        }
+
+        .terminal-output p { margin: 0 0 4px 0; word-wrap: break-word; }
+        .log-rx { color: var(--rx-color); }
+        .log-tx { color: var(--tx-color); }
+        .log-sys { color: var(--success); font-style: italic; }
+        .log-err { color: var(--danger); font-weight: bold; }
+
+        .input-group { display: flex; gap: 0.5rem; }
+        .input-group input { flex: 1; }
+
+        /* Script Panel */
+        .script-container { height: 350px; }
+
+        textarea.script-area {
+            flex: 1;
+            width: 100%;
+            background: #000;
+            color: var(--text-color);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem;
+            resize: none;
+            outline: none;
+            margin-bottom: 1rem;
+        }
+        textarea.script-area:focus { border-color: var(--primary); }
+
+        .script-controls { display: flex; gap: 0.5rem; }
+
+        /* Right Panel */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .chart-container {
+            flex: 2;
+            min-height: 400px;
+            position: relative;
+        }
+        
+        canvas { width: 100% !important; height: 100% !important; }
+
+        .guide-container {
+            flex: 1;
+            min-height: 250px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: var(--text-muted);
+        }
+        .guide-container h3 { color: var(--text-color); margin-top: 1rem; margin-bottom: 0.5rem; }
+        .guide-container code {
+            background: #000;
+            color: #a78bfa;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
+        }
+
+        /* Modal Settings */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .modal-content {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            width: 400px;
+            max-width: 90%;
+            box-shadow: var(--shadow);
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-content h2 { font-size: 1.25rem; margin-bottom: 1rem; }
+        .channel-list { overflow-y: auto; flex: 1; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+        .channel-item { display: flex; align-items: center; gap: 0.5rem; background: var(--bg-color); padding: 0.5rem; border-radius: 6px; }
+        .channel-item input[type="color"] { width: 30px; height: 30px; padding: 0; border: none; border-radius: 4px; cursor: pointer; }
+        .channel-item input[type="text"] { flex: 1; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Hidden file input */
+        #scriptFileInput { display: none; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-area">
+            <h1>Web Serial Plotter & Terminal</h1>
+        </div>
+        <div class="controls">
+            <select id="baudRate">
+                <option value="9600">9600 baud</option>
+                <option value="19200">19200 baud</option>
+                <option value="38400">38400 baud</option>
+                <option value="57600">57600 baud</option>
+                <option value="115200" selected>115200 baud</option>
+                <option value="250000">250000 baud</option>
+            </select>
+            <button id="btnConnect" class="btn-primary">Connect</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="left-panel">
+            <!-- Terminal Card -->
+            <div class="card terminal-container">
+                <div class="card-header">
+                    <span>Terminal</span>
+                    <div class="header-actions">
+                        <label><input type="checkbox" id="autoScroll" checked> Auto Scroll</label>
+                        <button class="btn-secondary small" onclick="exportLog('txt')">TXT</button>
+                        <button class="btn-secondary small" onclick="exportLog('csv')">CSV</button>
+                        <button class="btn-danger small" onclick="clearTerminal()">Clear</button>
+                    </div>
+                </div>
+                <div class="terminal-output" id="terminalOutput">
+                    <p class="log-sys">Hệ thống sẵn sàng. Nhấn Connect để kết nối với thiết bị.</p>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="manualInput" placeholder="Nhập lệnh hoặc $HEX..." autocomplete="off">
+                    <button class="btn-primary" id="btnSend">Gửi</button>
+                </div>
+            </div>
+
+            <!-- Script Card -->
+            <div class="card script-container">
+                <div class="card-header">
+                    <span>Script List</span>
+                    <div class="header-actions">
+                        <input type="file" id="scriptFileInput" accept=".txt,.csv" onchange="importScript(event)">
+                        <button class="btn-secondary small" onclick="document.getElementById('scriptFileInput').click()">Import</button>
+                        <button class="btn-secondary small" onclick="exportScript('txt')">Export</button>
+                    </div>
+                </div>
+                <textarea class="script-area" id="scriptArea" placeholder="# Định dạng: Lệnh||Delay_ms&#10;$1A 2B||1000&#10;HELLO||500"></textarea>
+                <div class="script-controls">
+                    <button class="btn-primary" id="btnRunScript" style="flex: 1;">Run Script</button>
+                    <button class="btn-danger" id="btnStopScript" style="flex: 1;" disabled>Stop</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <!-- Chart Card -->
+            <div class="card chart-container">
+                <div class="card-header">
+                    <span>Realtime Plotter</span>
+                    <div class="header-actions">
+                        <label><input type="radio" name="plotRange" value="all"> All</label>
+                        <label><input type="radio" name="plotRange" value="range" checked> Range</label>
+                        <input type="number" id="plotRangeValue" value="100" style="width: 70px;" title="Số lượng mẫu gần nhất">
+                        <label style="margin-left: 10px; color: var(--danger); font-weight: bold; cursor: pointer;">
+                            <input type="checkbox" id="pausePlot"> Tạm dừng
+                        </label>
+                        <button class="btn-secondary small" onclick="resetZoom()" style="margin-left: 10px;">Reset Zoom</button>
+                        <button class="btn-primary small" onclick="openSettingsModal()">Thiết lập Kênh</button>
+                        <button class="btn-danger small" onclick="clearChart()">Clear</button>
+                    </div>
+                </div>
+                <canvas id="serialChart"></canvas>
+            </div>
+
+            <!-- Guide Card -->
+            <div class="card guide-container">
+                <div class="card-header">
+                    <span>Hướng dẫn sử dụng</span>
+                </div>
+                <div style="overflow-y: auto; padding-right: 10px;">
+                    <h3>1. Vẽ biểu đồ chuyên nghiệp</h3>
+                    <p>- <strong>Tự động nhận diện:</strong> Phân tách các kênh bằng <code>\t</code> và xuống dòng <code>\n</code>.</p>
+                    <p>- <strong>Thu phóng (Zoom/Pan):</strong> Sử dụng <strong>Con lăn chuột</strong> (Mouse Wheel) để phóng to/thu nhỏ đồ thị. <strong>Giữ chuột trái và kéo</strong> để di chuyển (Pan) qua lại giữa các vùng dữ liệu.</p>
+                    <p>- <strong>Hiển thị:</strong> Chọn 'All' để xem toàn bộ lịch sử (có thể gây lag nếu chạy quá lâu), hoặc 'Range' để chỉ hiển thị N mẫu gần nhất. Nút <strong>Thiết lập Kênh</strong> cho phép đổi tên và màu sắc từng kênh hiển thị.</p>
+                    
+                    <h3>2. Xuất/Nhập dữ liệu</h3>
+                    <p>- <strong>Terminal:</strong> Lưu lịch sử nhận/gửi thành file TXT hoặc CSV dễ dàng cho việc phân tích Excel.</p>
+                    <p>- <strong>Script List:</strong> Import/Export kịch bản giúp bạn tái sử dụng nhiều bộ lệnh (hỗ trợ .txt và .csv).</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Cài đặt -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-content">
+            <h2>Thiết lập Kênh (Channels)</h2>
+            <div class="channel-list" id="channelSettingsList">
+                <!-- Sẽ chèn tự động -->
+            </div>
+            <button class="btn-secondary" onclick="closeSettingsModal()" style="margin-top: 10px; width: 100%;">Đóng</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Web Serial API Logic ---
+        let port;
+        let reader;
+        let writer;
+        let keepReading = true;
+        let readPromise;
+        let isConnected = false;
+
+        const terminalOutput = document.getElementById('terminalOutput');
+        const manualInput = document.getElementById('manualInput');
+        const btnConnect = document.getElementById('btnConnect');
+        const btnSend = document.getElementById('btnSend');
+        const scriptArea = document.getElementById('scriptArea');
+        const btnRunScript = document.getElementById('btnRunScript');
+        const btnStopScript = document.getElementById('btnStopScript');
+        const cbAutoScroll = document.getElementById('autoScroll');
+
+        let isScriptRunning = false;
+        let stopScriptFlag = false;
+
+        if (!("serial" in navigator)) {
+            logSys("Lỗi: Trình duyệt không hỗ trợ Web Serial API.", true);
+            btnConnect.disabled = true;
+        }
+
+        btnConnect.addEventListener('click', async () => {
+            if (isConnected) await disconnectSerial();
+            else await connectSerial();
+        });
+
+        async function connectSerial() {
+            try {
+                const baudRate = parseInt(document.getElementById('baudRate').value);
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate });
+                
+                isConnected = true;
+                btnConnect.innerHTML = 'Disconnect';
+                btnConnect.className = 'btn-danger';
+                logSys(`Đã kết nối (${baudRate} baud).`);
+                
+                clearChart(); // Reset biểu đồ mỗi lần kết nối mới
+                
+                keepReading = true;
+                readPromise = readLoop();
+            } catch (err) {
+                logSys("Lỗi kết nối: " + err.message, true);
+            }
+        }
+
+        async function disconnectSerial() {
+            try {
+                isConnected = false;
+                keepReading = false;
+                if (reader) await reader.cancel();
+                if (readPromise) await readPromise;
+                if (writer) writer.releaseLock();
+                await port.close();
+                
+                btnConnect.innerHTML = 'Connect';
+                btnConnect.className = 'btn-primary';
+                logSys("Đã ngắt kết nối.");
+            } catch (err) {
+                logSys("Lỗi ngắt kết nối: " + err.message, true);
+            }
+        }
+
+        async function readLoop() {
+            while (port.readable && keepReading) {
+                reader = port.readable.getReader();
+                try {
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        if (value) processSerialData(value);
+                    }
+                } catch (error) {} finally {
+                    reader.releaseLock();
+                }
+            }
+        }
+
+        async function sendData(cmd) {
+            if (!port || !port.writable) {
+                logSys("Chưa kết nối thiết bị!", true);
+                return;
+            }
+            writer = port.writable.getWriter();
+            try {
+                if (cmd.startsWith('$')) {
+                    const hexStr = cmd.substring(1).replace(/\s/g, '');
+                    const bytes = [];
+                    for(let i = 0; i < hexStr.length; i+=2) {
+                        bytes.push(parseInt(hexStr.substring(i, i+2), 16));
+                    }
+                    const dataObj = new Uint8Array(bytes);
+                    await writer.write(dataObj);
+                    logTx(`[HEX] ${Array.from(dataObj).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}`);
+                } else {
+                    const encoder = new TextEncoder();
+                    const dataObj = encoder.encode(cmd + '\n');
+                    await writer.write(dataObj);
+                    logTx(cmd);
+                }
+            } catch (error) {
+                logSys("Lỗi gửi dữ liệu: " + error.message, true);
+            } finally {
+                writer.releaseLock();
+            }
+        }
+
+        // --- Data Processing ---
+        const textDecoder = new TextDecoder();
+        let incomingBuffer = "";
+
+        function processSerialData(uint8array) {
+            incomingBuffer += textDecoder.decode(uint8array, { stream: true });
+            let lines = incomingBuffer.split('\n');
+            incomingBuffer = lines.pop(); // Giữ lại phần chưa hoàn chỉnh
+            
+            // Nếu buffer quá dài mà không có dấu xuống dòng (thường do sai Baud rate gây ra rác)
+            // Ép buộc in ra để người dùng dễ phát hiện lỗi
+            if (incomingBuffer.length > 500) {
+                lines.push(incomingBuffer);
+                incomingBuffer = "";
+            }
+            
+            for (let line of lines) {
+                line = line.replace('\r', '').trim();
+                if (line) {
+                    logRx(line);
+                    let vals = line.split('\t').filter(v => v !== '');
+                    let nums = vals.map(v => parseFloat(v));
+                    let validNums = nums.filter(n => !isNaN(n));
+                    if (validNums.length > 0) {
+                        updateChart(validNums);
+                    }
+                }
+            }
+        }
+
+        // --- Terminal Interactions ---
+        btnSend.addEventListener('click', () => {
+            const val = manualInput.value.trim();
+            if (val) {
+                sendData(val);
+                manualInput.value = '';
+            }
+        });
+
+        manualInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') btnSend.click();
+        });
+
+        function logRx(msg) { appendLog('log-rx', `RX: ${msg}`); }
+        function logTx(msg) { appendLog('log-tx', `TX: ${msg}`); }
+        function logSys(msg, isErr = false) { appendLog(isErr ? 'log-err' : 'log-sys', `[SYS] ${msg}`); }
+
+        function appendLog(className, text) {
+            const p = document.createElement('p');
+            p.className = className;
+            p.textContent = text;
+            terminalOutput.appendChild(p);
+            
+            if (cbAutoScroll.checked) {
+                terminalOutput.scrollTop = terminalOutput.scrollHeight;
+            }
+        }
+        
+        function clearTerminal() {
+            terminalOutput.innerHTML = '';
+            logSys("Đã xóa màn hình Terminal.");
+        }
+
+        function exportLog(type) {
+            let content = "";
+            const lines = terminalOutput.querySelectorAll('p');
+            
+            if (type === 'csv') {
+                content = "Type,Message\n";
+                lines.forEach(p => {
+                    let msgType = p.className.replace('log-', '').toUpperCase();
+                    let text = p.textContent.replace(/"/g, '""');
+                    content += `${msgType},"${text}"\n`;
+                });
+            } else {
+                lines.forEach(p => {
+                    content += p.textContent + '\n';
+                });
+            }
+            
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `terminal_log_${new Date().getTime()}.${type}`;
+            a.click();
+        }
+
+        // --- Script Runner & Import/Export ---
+        btnRunScript.addEventListener('click', async () => {
+            const scriptText = scriptArea.value;
+            if (!scriptText.trim()) return logSys("Kịch bản trống!", true);
+            if (!isConnected) return logSys("Vui lòng kết nối trước!", true);
+
+            const lines = scriptText.split('\n');
+            isScriptRunning = true;
+            stopScriptFlag = false;
+            
+            btnRunScript.disabled = true;
+            btnStopScript.disabled = false;
+            scriptArea.disabled = true;
+            
+            logSys("=== BẮT ĐẦU CHẠY KỊCH BẢN ===");
+            for (let i = 0; i < lines.length; i++) {
+                if (stopScriptFlag) {
+                    logSys("Đã dừng kịch bản.");
+                    break;
+                }
+                
+                let line = lines[i].trim();
+                if (line === '' || line.startsWith('#')) continue;
+                
+                let delay = 500;
+                let cmd = line;
+                if (line.includes('||')) {
+                    const parts = line.split('||');
+                    cmd = parts[0].trim();
+                    delay = parseInt(parts[1].trim()) || 500;
+                }
+                
+                await sendData(cmd);
+                if (delay > 0) await new Promise(r => setTimeout(r, delay));
+            }
+            if (!stopScriptFlag) logSys("=== HOÀN THÀNH KỊCH BẢN ===");
+            
+            isScriptRunning = false;
+            btnRunScript.disabled = false;
+            btnStopScript.disabled = true;
+            scriptArea.disabled = false;
+        });
+
+        btnStopScript.addEventListener('click', () => { stopScriptFlag = true; });
+
+        function exportScript(type) {
+            const text = scriptArea.value;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `script_${new Date().getTime()}.${type}`;
+            a.click();
+        }
+
+        function importScript(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => { scriptArea.value = e.target.result; };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset
+        }
+
+        // --- Chart.js & Zoom Settings ---
+        const ctx = document.getElementById('serialChart').getContext('2d');
+        const defaultColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+        
+        let chart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                parsing: false, // Tắt parsing để tăng tối đa hiệu suất vẽ realtime
+                elements: {
+                    point: { radius: 0 },
+                    line: { borderWidth: 2, tension: 0.1 }
+                },
+                scales: {
+                    x: { 
+                        type: 'linear', 
+                        display: true,
+                        title: { display: true, text: 'Time (samples)', color: '#94a3b8' },
+                        ticks: { color: '#94a3b8' },
+                        grid: { color: 'rgba(51, 65, 85, 0.2)' }
+                    },
+                    y: { grid: { color: 'rgba(51, 65, 85, 0.5)' }, ticks: { color: '#94a3b8' } }
+                },
+                plugins: {
+                    legend: { labels: { color: '#f8fafc' } },
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                    }
+                },
+                interaction: { intersect: false, mode: 'index' },
+            }
+        });
+
+        let timeIndex = 0;
+
+        function updateChart(dataArray) {
+            // Khởi tạo kênh nếu chưa có
+            while (chart.data.datasets.length < dataArray.length) {
+                const colorIdx = chart.data.datasets.length % defaultColors.length;
+                chart.data.datasets.push({
+                    label: `Channel ${chart.data.datasets.length + 1}`,
+                    data: [],
+                    borderColor: defaultColors[colorIdx],
+                    backgroundColor: defaultColors[colorIdx] + '33',
+                    fill: false,
+                    borderWidth: 2
+                });
+            }
+
+            // Xử lý giới hạn Range hoặc All
+            const isRange = document.querySelector('input[name="plotRange"]:checked').value === 'range';
+            const limit = parseInt(document.getElementById('plotRangeValue').value) || 100;
+            const isPaused = document.getElementById('pausePlot').checked;
+
+            for (let i = 0; i < dataArray.length; i++) {
+                chart.data.datasets[i].data.push({ x: timeIndex, y: dataArray[i] });
+                // Không xóa data liên tục để xem lại lịch sử. Chỉ xóa khi quá 50,000 điểm để tránh tràn RAM
+                if (chart.data.datasets[i].data.length > 50000) {
+                    chart.data.datasets[i].data.shift();
+                }
+            }
+            timeIndex++;
+            
+            // Nếu người dùng chọn Tạm dừng, không ép khung nhìn cuộn nữa để họ tự do kéo xem (Pan/Zoom)
+            if (!isPaused) {
+                if (isRange) {
+                    chart.options.scales.x.min = Math.max(0, timeIndex - limit);
+                    chart.options.scales.x.max = timeIndex;
+                } else {
+                    delete chart.options.scales.x.min;
+                    delete chart.options.scales.x.max;
+                }
+            }
+            
+            // Cập nhật không animation để đảm bảo perf
+            chart.update('none');
+        }
+        
+        function clearChart() {
+            chart.data.datasets.forEach(ds => { ds.data = []; });
+            timeIndex = 0;
+            delete chart.options.scales.x.min;
+            delete chart.options.scales.x.max;
+            if (chart.resetZoom) chart.resetZoom();
+            chart.update('none');
+            logSys("Đã xóa dữ liệu đồ thị.");
+        }
+
+        function resetZoom() {
+            chart.resetZoom();
+        }
+
+        // --- Channel Settings Modal ---
+        const modal = document.getElementById('settingsModal');
+        
+        function openSettingsModal() {
+            const list = document.getElementById('channelSettingsList');
+            list.innerHTML = '';
+            
+            if (chart.data.datasets.length === 0) {
+                list.innerHTML = '<p style="color:var(--text-muted); text-align:center;">Chưa có kênh dữ liệu nào. Vui lòng kết nối và nhận dữ liệu trước.</p>';
+            } else {
+                chart.data.datasets.forEach((ds, i) => {
+                    list.innerHTML += `
+                        <div class="channel-item">
+                            <span style="width: 20px;">#${i+1}</span>
+                            <input type="color" value="${ds.borderColor.substring(0, 7)}" onchange="updateChannelColor(${i}, this.value)">
+                            <input type="text" value="${ds.label}" onchange="updateChannelName(${i}, this.value)" placeholder="Tên kênh">
+                        </div>
+                    `;
+                });
+            }
+            modal.style.display = 'flex';
+        }
+
+        function closeSettingsModal() {
+            modal.style.display = 'none';
+        }
+
+        function updateChannelName(i, name) {
+            if(chart.data.datasets[i]) {
+                chart.data.datasets[i].label = name;
+                chart.update('none');
+            }
+        }
+
+        function updateChannelColor(i, color) {
+            if(chart.data.datasets[i]) {
+                chart.data.datasets[i].borderColor = color;
+                chart.data.datasets[i].backgroundColor = color + '33';
+                chart.update('none');
+            }
+        }
+    </script>
+</body>
+</html>
