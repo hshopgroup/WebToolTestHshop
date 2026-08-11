@@ -137,7 +137,7 @@
             display: flex;
             flex-direction: column;
             gap: 1.5rem;
-            min-width: 400px;
+            min-width: 250px;
             min-height: 0;
         }
 
@@ -182,10 +182,6 @@
         .terminal-output {
             flex: 1;
             background: #000;
-            border-radius: 8px;
-            padding: 0.75rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
             overflow-y: auto;
             margin-bottom: 1rem;
             border: 1px solid var(--border);
@@ -235,6 +231,7 @@
             gap: 1.5rem;
             overflow-y: auto;
             min-height: 0;
+            min-width: 300px;
         }
 
         .chart-container {
@@ -256,7 +253,33 @@
 
         .guide-container {
             flex: 1;
-            min-height: 250px;
+            min-height: 200px;
+        }
+
+        /* Splitters */
+        .v-resizer {
+            width: 8px;
+            cursor: col-resize;
+            background: transparent;
+            border-radius: 4px;
+            transition: background 0.2s;
+            margin: 0 -0.5rem;
+            z-index: 10;
+        }
+        .v-resizer:hover, .v-resizer.resizing { background: rgba(59, 130, 246, 0.5); }
+        
+        .h-resizer {
+            height: 8px;
+            cursor: row-resize;
+            background: transparent;
+            border-radius: 4px;
+            transition: background 0.2s;
+            margin: -0.5rem 0;
+            z-index: 10;
+        }
+        .h-resizer:hover, .h-resizer.resizing { background: rgba(59, 130, 246, 0.5); }
+        
+        .guide-container {
             font-size: 0.9rem;
             line-height: 1.6;
             color: var(--text-muted);
@@ -332,19 +355,29 @@
     <main>
         <div class="left-panel">
             <!-- Terminal Card -->
-            <div class="card terminal-container">
+            <div class="card terminal-container" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
                 <div class="card-header">
-                    <span>Terminal</span>
+                    <span>Terminal (TX: <span id="txCount">0</span> | RX: <span id="rxCount">0</span>)</span>
                     <div class="header-actions">
-                        <label><input type="checkbox" id="autoScroll" checked> Auto Scroll</label>
+                        <label><input type="checkbox" id="showTime"> Time</label>
+                        <label><input type="checkbox" id="showHex" checked> HEX</label>
+                        <label><input type="checkbox" id="autoScroll" id="cbAutoScroll" checked> Auto Scroll</label>
+                        <button class="btn-secondary small" onclick="resetCounters()">Reset</button>
                         <button class="btn-secondary small" onclick="exportLog('txt')">TXT</button>
                         <button class="btn-secondary small" onclick="exportLog('csv')">CSV</button>
                         <button class="btn-danger small" onclick="clearTerminal()">Clear</button>
                     </div>
                 </div>
-                <div class="terminal-output" id="terminalOutput">
-                    <p class="log-sys">Hệ thống sẵn sàng. Nhấn Connect để kết nối với thiết bị.</p>
+                
+                <div style="display: flex; flex: 1; min-height: 0; gap: 10px; margin-bottom: 1rem;">
+                    <div class="terminal-output" id="terminalOutputAscii">
+                        <p class="log-sys">TXT-Mode. Hệ thống sẵn sàng.</p>
+                    </div>
+                    <div class="terminal-output" id="terminalOutputHex">
+                        <p class="log-sys">HEX-Mode. Hệ thống sẵn sàng.</p>
+                    </div>
                 </div>
+
                 <div class="input-group">
                     <input type="text" id="manualInput" placeholder="Nhập lệnh hoặc $HEX..." autocomplete="off">
                     <select id="lineEnding" style="width: auto;">
@@ -357,8 +390,10 @@
                 </div>
             </div>
 
+            <div class="h-resizer" id="h-resizer"></div>
+
             <!-- Script Card -->
-            <div class="card script-container">
+            <div class="card script-container" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
                 <div class="card-header">
                     <span>Script List</span>
                     <div class="header-actions">
@@ -367,13 +402,15 @@
                         <button class="btn-secondary small" onclick="exportScript('txt')">Export</button>
                     </div>
                 </div>
-                <textarea class="script-area" id="scriptArea" placeholder="# Định dạng: Lệnh||Delay_ms&#10;$1A 2B||1000&#10;HELLO||500"></textarea>
+                <textarea class="script-area" id="scriptArea" style="flex: 1; min-height: 0;" placeholder="# Định dạng: Lệnh||Delay_ms&#10;$1A 2B||1000&#10;HELLO||500"></textarea>
                 <div class="script-controls">
                     <button class="btn-primary" id="btnRunScript" style="flex: 1;">Run Script</button>
                     <button class="btn-danger" id="btnStopScript" style="flex: 1;" disabled>Stop</button>
                 </div>
             </div>
         </div>
+
+        <div class="v-resizer" id="v-resizer"></div>
 
         <div class="right-panel">
             <!-- Chart Card -->
@@ -448,6 +485,26 @@
         let isScriptRunning = false;
         let stopScriptFlag = false;
 
+        let txCounter = 0;
+        let rxCounter = 0;
+        const txCountEl = document.getElementById('txCount');
+        const rxCountEl = document.getElementById('rxCount');
+        const terminalAscii = document.getElementById('terminalOutputAscii');
+        const terminalHex = document.getElementById('terminalOutputHex');
+
+        function updateCounters(txBytes = 0, rxBytes = 0) {
+            txCounter += txBytes;
+            rxCounter += rxBytes;
+            txCountEl.textContent = txCounter;
+            rxCountEl.textContent = rxCounter;
+        }
+
+        function resetCounters() {
+            txCounter = 0;
+            rxCounter = 0;
+            updateCounters();
+        }
+
         // --- URL Params Logic (Hide UI) ---
         const params = new URLSearchParams(window.location.search);
         const hideParam = params.get('hide');
@@ -459,7 +516,13 @@
             if (hides.includes('guide')) document.querySelector('.guide-container').style.display = 'none';
             
             if (hides.includes('terminal') && hides.includes('script')) document.querySelector('.left-panel').style.display = 'none';
-            if (hides.includes('plotter') && hides.includes('guide')) document.querySelector('.right-panel').style.display = 'none';
+            if (hides.includes('plotter') && hides.includes('guide')) {
+                document.querySelector('.right-panel').style.display = 'none';
+                document.querySelector('.left-panel').style.flex = '1';
+                document.querySelector('.left-panel').style.width = '100%';
+                const vr = document.getElementById('v-resizer');
+                if (vr) vr.style.display = 'none';
+            }
         }
 
         // --- Iframe Bus Logic (Share Serial) ---
@@ -585,8 +648,12 @@
                         bytes.push(parseInt(hexStr.substring(i, i+2), 16));
                     }
                     const dataObj = new Uint8Array(bytes);
+                    updateCounters(dataObj.length, 0);
                     await writer.write(dataObj);
-                    logTx(`[HEX] ${Array.from(dataObj).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}`);
+                    
+                    const hexLogStr = Array.from(dataObj).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                    logTx(`[HEX] ${hexLogStr}`, false);
+                    logTx(hexLogStr, true);
                 } else {
                     let finalCmd = cmd;
                     // Nếu là kịch bản, chuyển đổi các ký tự escape \n \r \t thành ký tự thực
@@ -604,11 +671,15 @@
 
                     const encoder = new TextEncoder();
                     const dataObj = encoder.encode(finalCmd);
+                    updateCounters(dataObj.length, 0);
                     await writer.write(dataObj);
                     
                     // Hiển thị ra log với các ký tự ẩn được làm rõ
                     let logStr = finalCmd.replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
-                    logTx(logStr);
+                    logTx(logStr, false); // Ghi ASCII
+                    
+                    const hexLogStr = Array.from(dataObj).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                    logTx(hexLogStr, true); // Ghi HEX
                 }
             } catch (error) {
                 logSys("Lỗi gửi dữ liệu: " + error.message, true);
@@ -620,8 +691,20 @@
         // --- Data Processing ---
         const textDecoder = new TextDecoder();
         let incomingBuffer = "";
+        let hexBuffer = [];
 
         function processSerialData(uint8array) {
+            updateCounters(0, uint8array.length);
+            
+            // In dữ liệu raw ra Terminal HEX liên tục
+            for (let b of uint8array) {
+                hexBuffer.push(b.toString(16).padStart(2, '0').toUpperCase());
+                if (b === 0x0A || hexBuffer.length >= 20) {
+                    logRx(hexBuffer.join(' '), true); // isHex = true
+                    hexBuffer = [];
+                }
+            }
+
             incomingBuffer += textDecoder.decode(uint8array, { stream: true });
             let lines = incomingBuffer.split('\n');
             incomingBuffer = lines.pop(); // Giữ lại phần chưa hoàn chỉnh
@@ -636,7 +719,7 @@
             for (let line of lines) {
                 line = line.replace('\r', '').trim();
                 if (line) {
-                    logRx(line);
+                    logRx(line, false); // In ra ASCII
                     let vals = line.split('\t').filter(v => v !== '');
                     let nums = vals.map(v => parseFloat(v));
                     let validNums = nums.filter(n => !isNaN(n));
@@ -660,29 +743,48 @@
             if (e.key === 'Enter') btnSend.click();
         });
 
-        function logRx(msg) { appendLog('log-rx', `RX: ${msg}`); }
-        function logTx(msg) { appendLog('log-tx', `TX: ${msg}`); }
-        function logSys(msg, isErr = false) { appendLog(isErr ? 'log-err' : 'log-sys', `[SYS] ${msg}`); }
+        function logRx(msg, isHex = false) { appendLog('log-rx', `RX: ${msg}`, isHex); }
+        function logTx(msg, isHex = false) { appendLog('log-tx', `TX: ${msg}`, isHex); }
+        function logSys(msg, isErr = false) { appendLog(isErr ? 'log-err' : 'log-sys', `[SYS] ${msg}`, false, true); }
 
-        function appendLog(className, text) {
+        function getTimestamp() {
+            if (!document.getElementById('showTime').checked) return "";
+            const now = new Date();
+            return `[${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}.${String(now.getMilliseconds()).padStart(3,'0')}] `;
+        }
+
+        function appendLog(className, text, isHex = false, isSys = false) {
             const p = document.createElement('p');
             p.className = className;
-            p.textContent = text;
-            terminalOutput.appendChild(p);
+            p.textContent = getTimestamp() + text;
             
-            if (cbAutoScroll.checked) {
-                terminalOutput.scrollTop = terminalOutput.scrollHeight;
+            if (isSys) {
+                const p2 = p.cloneNode(true);
+                terminalAscii.appendChild(p);
+                terminalHex.appendChild(p2);
+            } else if (isHex) {
+                terminalHex.appendChild(p);
+            } else {
+                terminalAscii.appendChild(p);
+            }
+            
+            const cbAutoScroll = document.getElementById('autoScroll');
+            if (cbAutoScroll && cbAutoScroll.checked) {
+                if (isSys || !isHex) terminalAscii.scrollTop = terminalAscii.scrollHeight;
+                if (isSys || isHex) terminalHex.scrollTop = terminalHex.scrollHeight;
             }
         }
         
         function clearTerminal() {
-            terminalOutput.innerHTML = '';
+            terminalAscii.innerHTML = '';
+            terminalHex.innerHTML = '';
             logSys("Đã xóa màn hình Terminal.");
         }
 
         function exportLog(type) {
+            // ... Logic export có thể cần cập nhật sau, tạm thời giữ nguyên lấy từ ASCII
             let content = "";
-            const lines = terminalOutput.querySelectorAll('p');
+            const lines = terminalAscii.querySelectorAll('p');
             
             if (type === 'csv') {
                 content = "Type,Message\n";
@@ -917,6 +1019,72 @@
             chart.getDatasetMeta(i).hidden = !isVisible;
             chart.update('none');
         }
+
+        // --- Splitter Logic ---
+        const vResizer = document.getElementById('v-resizer'); // Cột trái - phải
+        const hResizer = document.getElementById('h-resizer'); // Terminal - Script
+        const leftPanel = document.querySelector('.left-panel');
+        const terminalContainer = document.querySelector('.terminal-container');
+        
+        let isResizingV = false;
+        let isResizingH = false;
+
+        if (vResizer) {
+            vResizer.addEventListener('mousedown', (e) => {
+                isResizingV = true;
+                document.body.style.cursor = 'col-resize';
+                vResizer.classList.add('resizing');
+            });
+        }
+
+        if (hResizer) {
+            hResizer.addEventListener('mousedown', (e) => {
+                isResizingH = true;
+                document.body.style.cursor = 'row-resize';
+                hResizer.classList.add('resizing');
+            });
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            if (isResizingV) {
+                let newWidth = e.clientX - leftPanel.getBoundingClientRect().left;
+                if (newWidth < 300) newWidth = 300;
+                if (newWidth > window.innerWidth - 300) newWidth = window.innerWidth - 300;
+                
+                leftPanel.style.width = newWidth + 'px';
+                leftPanel.style.flex = 'none';
+            }
+            if (isResizingH) {
+                let newHeight = e.clientY - terminalContainer.getBoundingClientRect().top;
+                const minHeight = 150;
+                let maxHeight = leftPanel.clientHeight - 150;
+                if (maxHeight < minHeight) maxHeight = minHeight; // Fallback if container is too small
+
+                if (newHeight < minHeight) newHeight = minHeight;
+                if (newHeight > maxHeight) newHeight = maxHeight;
+
+                terminalContainer.style.height = newHeight + 'px';
+                terminalContainer.style.flex = 'none';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizingV) {
+                isResizingV = false;
+                document.body.style.cursor = 'default';
+                vResizer.classList.remove('resizing');
+            }
+            if (isResizingH) {
+                isResizingH = false;
+                document.body.style.cursor = 'default';
+                hResizer.classList.remove('resizing');
+            }
+        });
+
+        // --- Toggle HEX Window ---
+        document.getElementById('showHex').addEventListener('change', (e) => {
+            document.getElementById('terminalOutputHex').style.display = e.target.checked ? 'block' : 'none';
+        });
     </script>
 </body>
 </html>
