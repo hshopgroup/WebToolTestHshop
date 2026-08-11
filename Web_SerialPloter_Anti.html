@@ -340,6 +340,12 @@
                 </div>
                 <div class="input-group">
                     <input type="text" id="manualInput" placeholder="Nhập lệnh hoặc $HEX..." autocomplete="off">
+                    <select id="lineEnding" style="width: auto;">
+                        <option value="none">NONE</option>
+                        <option value="cr">CR</option>
+                        <option value="lf" selected>LF</option>
+                        <option value="crlf">CR+LF</option>
+                    </select>
                     <button class="btn-primary" id="btnSend">Gửi</button>
                 </div>
             </div>
@@ -495,7 +501,7 @@
             }
         }
 
-        async function sendData(cmd) {
+        async function sendData(cmd, isScript = false) {
             if (!port || !port.writable) {
                 logSys("Chưa kết nối thiết bị!", true);
                 return;
@@ -512,10 +518,27 @@
                     await writer.write(dataObj);
                     logTx(`[HEX] ${Array.from(dataObj).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}`);
                 } else {
+                    let finalCmd = cmd;
+                    // Nếu là kịch bản, chuyển đổi các ký tự escape \n \r \t thành ký tự thực
+                    if (isScript) {
+                        finalCmd = finalCmd.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t');
+                    }
+                    
+                    // Thêm line ending từ ComboBox (chỉ dành cho Terminal)
+                    if (!isScript) {
+                        const ending = document.getElementById('lineEnding').value;
+                        if (ending === 'cr') finalCmd += '\r';
+                        else if (ending === 'lf') finalCmd += '\n';
+                        else if (ending === 'crlf') finalCmd += '\r\n';
+                    }
+
                     const encoder = new TextEncoder();
-                    const dataObj = encoder.encode(cmd + '\n');
+                    const dataObj = encoder.encode(finalCmd);
                     await writer.write(dataObj);
-                    logTx(cmd);
+                    
+                    // Hiển thị ra log với các ký tự ẩn được làm rõ
+                    let logStr = finalCmd.replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+                    logTx(logStr);
                 }
             } catch (error) {
                 logSys("Lỗi gửi dữ liệu: " + error.message, true);
@@ -556,9 +579,9 @@
 
         // --- Terminal Interactions ---
         btnSend.addEventListener('click', () => {
-            const val = manualInput.value.trim();
+            const val = manualInput.value; // Không trim() để cho phép gửi dấu cách nếu muốn
             if (val) {
-                sendData(val);
+                sendData(val, false);
                 manualInput.value = '';
             }
         });
@@ -640,11 +663,11 @@
                 let cmd = line;
                 if (line.includes('||')) {
                     const parts = line.split('||');
-                    cmd = parts[0].trim();
+                    cmd = parts[0]; // Không trim để giữ lại các khoảng trắng hoặc \t nếu người dùng cố ý nhập
                     delay = parseInt(parts[1].trim()) || 500;
                 }
                 
-                await sendData(cmd);
+                await sendData(cmd, true);
                 if (delay > 0) await new Promise(r => setTimeout(r, delay));
             }
             if (!stopScriptFlag) logSys("=== HOÀN THÀNH KỊCH BẢN ===");
