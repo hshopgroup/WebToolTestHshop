@@ -239,13 +239,20 @@
 
         .chart-container {
             flex: 2;
-            min-height: 400px;
+            min-height: 0;
             position: relative;
             display: flex;
             flex-direction: column;
         }
         
-        canvas { flex: 1; width: 100% !important; height: 100% !important; min-height: 0; }
+        .chart-wrapper {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+            width: 100%;
+        }
+        
+        canvas { width: 100% !important; height: 100% !important; }
 
         .guide-container {
             flex: 1;
@@ -385,7 +392,9 @@
                         <button class="btn-danger small" onclick="clearChart()">Clear</button>
                     </div>
                 </div>
-                <canvas id="serialChart"></canvas>
+                <div class="chart-wrapper">
+                    <canvas id="serialChart"></canvas>
+                </div>
             </div>
 
             <!-- Guide Card -->
@@ -439,6 +448,50 @@
         let isScriptRunning = false;
         let stopScriptFlag = false;
 
+        // --- URL Params Logic (Hide UI) ---
+        const params = new URLSearchParams(window.location.search);
+        const hideParam = params.get('hide');
+        if (hideParam) {
+            const hides = hideParam.split(',');
+            if (hides.includes('terminal')) document.querySelector('.terminal-container').style.display = 'none';
+            if (hides.includes('script')) document.querySelector('.script-container').style.display = 'none';
+            if (hides.includes('plotter')) document.querySelector('.chart-container').style.display = 'none';
+            if (hides.includes('guide')) document.querySelector('.guide-container').style.display = 'none';
+            
+            if (hides.includes('terminal') && hides.includes('script')) document.querySelector('.left-panel').style.display = 'none';
+            if (hides.includes('plotter') && hides.includes('guide')) document.querySelector('.right-panel').style.display = 'none';
+        }
+
+        // --- Iframe Bus Logic (Share Serial) ---
+        window.addEventListener('message', (e) => {
+            if (!e.data || !e.data.type) return;
+            
+            if (e.data.type === 'SERIAL_RX') {
+                if (!port) processSerialData(e.data.payload);
+            }
+            else if (e.data.type === 'SERIAL_TX') {
+                if (port && port.writable) { // Chỉ iframe Master mới được gửi
+                    sendData(e.data.cmd, e.data.isScript, true);
+                }
+            }
+            else if (e.data.type === 'SERIAL_CONNECT') {
+                if (!port) { // Cập nhật giao diện Slave
+                    isConnected = true;
+                    btnConnect.innerHTML = 'Connected (Bus)';
+                    btnConnect.className = 'btn-danger';
+                    logSys(`Đã kết nối qua Iframe Bus (${e.data.baudRate} baud).`);
+                }
+            }
+            else if (e.data.type === 'SERIAL_DISCONNECT') {
+                if (!port) {
+                    isConnected = false;
+                    btnConnect.innerHTML = 'Connect';
+                    btnConnect.className = 'btn-primary';
+                    logSys("Đã ngắt kết nối (Bus).");
+                }
+            }
+        });
+
         if (!("serial" in navigator)) {
             logSys("Lỗi: Trình duyệt không hỗ trợ Web Serial API.", true);
             btnConnect.disabled = true;
@@ -459,6 +512,10 @@
                 btnConnect.innerHTML = 'Disconnect';
                 btnConnect.className = 'btn-danger';
                 logSys(`Đã kết nối (${baudRate} baud).`);
+                
+                if (window.parent !== window) {
+                    window.parent.postMessage({ type: 'SERIAL_CONNECT', baudRate: baudRate }, '*');
+                }
                 
                 clearChart(); // Reset biểu đồ mỗi lần kết nối mới
                 
@@ -481,6 +538,10 @@
                 btnConnect.innerHTML = 'Connect';
                 btnConnect.className = 'btn-primary';
                 logSys("Đã ngắt kết nối.");
+                
+                if (window.parent !== window) {
+                    window.parent.postMessage({ type: 'SERIAL_DISCONNECT' }, '*');
+                }
             } catch (err) {
                 logSys("Lỗi ngắt kết nối: " + err.message, true);
             }
@@ -493,7 +554,12 @@
                     while (true) {
                         const { value, done } = await reader.read();
                         if (done) break;
-                        if (value) processSerialData(value);
+                        if (value) {
+                            processSerialData(value);
+                            if (window.parent !== window) {
+                                window.parent.postMessage({ type: 'SERIAL_RX', payload: value }, '*');
+                            }
+                        }
                     }
                 } catch (error) {} finally {
                     reader.releaseLock();
@@ -501,9 +567,13 @@
             }
         }
 
-        async function sendData(cmd, isScript = false) {
+        async function sendData(cmd, isScript = false, fromBus = false) {
             if (!port || !port.writable) {
-                logSys("Chưa kết nối thiết bị!", true);
+                if (window.parent !== window && !fromBus) {
+                    window.parent.postMessage({ type: 'SERIAL_TX', cmd: cmd, isScript: isScript }, '*');
+                } else {
+                    logSys("Chưa kết nối thiết bị!", true);
+                }
                 return;
             }
             writer = port.writable.getWriter();
@@ -722,10 +792,15 @@
                         ticks: { color: '#94a3b8' },
                         grid: { color: 'rgba(51, 65, 85, 0.2)' }
                     },
-                    y: { grid: { color: 'rgba(51, 65, 85, 0.5)' }, ticks: { color: '#94a3b8' } }
+                    y: { 
+                        display: true,
+                        title: { display: true, text: 'Giá trị', color: '#94a3b8' },
+                        grid: { color: 'rgba(51, 65, 85, 0.5)' }, 
+                        ticks: { color: '#94a3b8' } 
+                    }
                 },
                 plugins: {
-                    legend: { labels: { color: '#f8fafc' } },
+                    legend: { display: false },
                     zoom: {
                         pan: { enabled: true, mode: 'x' },
                         zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
@@ -805,9 +880,11 @@
                 list.innerHTML = '<p style="color:var(--text-muted); text-align:center;">Chưa có kênh dữ liệu nào. Vui lòng kết nối và nhận dữ liệu trước.</p>';
             } else {
                 chart.data.datasets.forEach((ds, i) => {
+                    const isHidden = chart.getDatasetMeta(i).hidden;
                     list.innerHTML += `
                         <div class="channel-item">
                             <span style="width: 20px;">#${i+1}</span>
+                            <input type="checkbox" title="Hiển thị kênh này" ${isHidden ? '' : 'checked'} onchange="toggleChannelVisibility(${i}, this.checked)">
                             <input type="color" value="${ds.borderColor.substring(0, 7)}" onchange="updateChannelColor(${i}, this.value)">
                             <input type="text" value="${ds.label}" onchange="updateChannelName(${i}, this.value)" placeholder="Tên kênh">
                         </div>
@@ -834,6 +911,11 @@
                 chart.data.datasets[i].backgroundColor = color + '33';
                 chart.update('none');
             }
+        }
+
+        function toggleChannelVisibility(i, isVisible) {
+            chart.getDatasetMeta(i).hidden = !isVisible;
+            chart.update('none');
         }
     </script>
 </body>
