@@ -47,6 +47,9 @@
   - *Khắc phục:* Ẩn toàn bộ nút Connect & chọn Baud Rate (bằng tham số `hide=controls`) ở các màn hình Plotter con. Dashboard chỉ duy trì 1 nút Connect duy nhất tại Terminal.
 - **Lỗi phải kết nối lại thủ công khi đổi Baud Rate:**
   - *Khắc phục:* Bắt sự kiện thay đổi (`change`) ở menu Baud, tự động ngắt kết nối và gọi lại kết nối mới với cờ `reusePort = true` để giữ nguyên Port đã xin phép từ trình duyệt mà không cần hiện Popup lại.
+- **Lỗi mất danh sách Button/Script khi thay đổi Layout trên Dashboard:**
+  - *Nguyên nhân:* Khi thao tác "Lưu & Hiển thị" trên thẻ "Cài đặt Layout" của Dashboard, toàn bộ các cửa sổ con (`iframe`) sẽ bị ép tạo mới và tải lại trang, làm mất trạng thái kịch bản đang lưu tạm trên bộ nhớ RAM.
+  - *Khắc phục:* Xây dựng cơ chế tự động lưu dữ liệu bằng `localStorage` (`saveScriptToStorage` / `loadScriptFromStorage`). Các thay đổi (import file, sửa nội dung, chuyển mode Text/Button) sẽ được ghi xuống ổ đĩa trình duyệt ngay lập tức và tự nạp lại khi iframe khởi động.
 
 ## 5. Các tính năng mở rộng đã hoàn thành (Mới cập nhật)
 - **Bảo vệ chống treo trình duyệt (Anti-freeze):**
@@ -59,7 +62,22 @@
   - Chuyển Script List thành một phần mềm quản lý kịch bản thu nhỏ.
   - Cho phép tạo, xóa, chuyển đổi các Sheet lệnh trực tiếp trên Web.
   - Hỗ trợ Import/Export file Excel chứa nhiều Sheet với chuẩn 3 cột (Command - Delay - Description).
-- **Tuỳ biến Layout linh hoạt:**
-  - Thêm hệ thống Checkbox bật/tắt hiển thị từng module (Terminal, Script, Plotter, Guide).
+- **Dashboard Builder (Giao diện tùy chỉnh mạnh mẽ):**
+  - Quản lý linh hoạt Layout: Giao diện `Dashboard.html` được chuyển đổi sang CSS Grid 12 cột.
+  - Hỗ trợ thêm nút **Cài đặt Layout** trực quan để:
+    - Thêm/sửa/xóa các View (Iframe module). Tùy chỉnh URL, Width, Height.
+    - Thêm/sửa/xóa các Nút Shortcut trực tiếp trên Dashboard, cho phép chọn tên, màu sắc, lệnh gửi và kích thước.
+  - **Lưu trữ Cấu hình siêu việt:** Toàn bộ cấu hình Layout của Dashboard sẽ được truyền xuyên màng (postMessage) xuống Iframe và lưu chung vào 1 Sheet ẩn tên là `DashboardConfig` trong file Excel của Script List! 
+  - Khôi phục Layout tự động khi người dùng Import file Excel cũ.
+- **Tuỳ biến Module linh hoạt:**
   - Tự động thay đổi kích thước và đẩy Full-width cho Terminal khi Plotter bị ẩn.
   - Tích hợp bộ điều khiển Checkbox tổng lên thanh điều hướng của `Dashboard.html`.
+- **Nâng cấp Button Script List (Giao diện nút bấm & Panel HMI):**
+  - Chuyển đổi qua lại linh hoạt giữa 3 chế độ: Text (viết mã), Button (nút bấm trực quan) và Panel (Bảng điều khiển).
+  - Ở chế độ Button: 
+    - Hiển thị trực quan dưới dạng danh sách, hỗ trợ nhập Command, Delay, Color, Width, Height cho từng nút.
+    - Cho phép Enable/Disable từng lệnh bằng Checkbox để chọn lọc chạy, hỗ trợ Chu kỳ (Cycles).
+  - Ở chế độ Panel:
+    - Trực quan hóa các lệnh thành một bảng điều khiển (Dashboard HMI) sử dụng CSS Grid 12 cột.
+    - Các nút có thể tùy biến kích thước và màu sắc, bấm là chạy ngay lập tức.
+  - Hỗ trợ lưu trữ toàn bộ cấu hình UI (Color, Width, Height) vào file Excel.

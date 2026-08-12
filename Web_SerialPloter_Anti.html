@@ -328,12 +328,43 @@
 
         /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg-color); }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
-
         /* Hidden file input */
         #scriptFileInput { display: none; }
+        
+        /* Script View Toggles */
+        .script-mode-selector {
+            padding: 2px 5px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: var(--bg-color);
+            color: var(--text-color);
+            outline: none;
+            margin-right: 5px;
+        }
+
+        .btn-script-row {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 5px;
+            align-items: center;
+        }
+        .btn-script-row input[type="text"] {
+            flex: 1;
+            min-width: 0;
+            padding: 4px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg-color);
+            color: var(--text-color);
+        }
+        .btn-script-row input[type="number"] {
+            width: 70px;
+            padding: 4px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg-color);
+            color: var(--text-color);
+        }
     </style>
 </head>
 <body>
@@ -403,13 +434,18 @@
 
             <!-- Script Card -->
             <div class="card script-container" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
-                <div class="card-header">
-                    <span style="display: flex; align-items: center; gap: 5px; flex-wrap: nowrap;">
-                        Script List
-                        <select id="scriptSheetSelector" style="margin-left: 5px; width: 150px; max-width: 200px; padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-color); color: var(--text-color); outline: none;"></select>
+                    <div class="card-header" style="flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+                        <strong>Script</strong>
+                        <select id="scriptSheetSelector" style="width: 100px; padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-color); color: var(--text-color); outline: none;"></select>
                         <button class="btn-secondary small" id="btnAddSheet" style="padding: 2px 8px; font-weight: bold;" title="Thêm Sheet mới">+</button>
                         <button class="btn-danger small" id="btnDeleteSheet" style="padding: 2px 8px; font-weight: bold;" title="Xóa Sheet hiện tại">✕</button>
-                    </span>
+                        <select id="scriptMode" class="script-mode-selector" style="margin-left: 5px;">
+                            <option value="text">Text Mode</option>
+                            <option value="button">Button Mode</option>
+                        </select>
+                        <span id="cycleLabel" style="display: none; white-space: nowrap;">Chu kỳ: <input type="number" id="scriptCycle" value="1" min="1" style="width: 50px; padding: 2px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-color); color: var(--text-color);"></span>
+                    </div>
                     <div class="header-actions">
                         <input type="file" id="scriptFileInput" accept=".txt,.csv,.xlsx" onchange="importScript(event)">
                         <button class="btn-secondary small" onclick="document.getElementById('scriptFileInput').click()">Import</button>
@@ -417,7 +453,8 @@
                         <button class="btn-secondary small" onclick="exportScript('txt')">TXT</button>
                     </div>
                 </div>
-                <textarea class="script-area" id="scriptArea" style="flex: 1; min-height: 0;" placeholder="# Định dạng: Lệnh||Delay_ms&#10;$1A 2B||1000&#10;HELLO||500"></textarea>
+                <textarea class="script-area" id="scriptArea" style="flex: 1; min-height: 0;" placeholder="# Định dạng: Lệnh||Delay||Description&#10;$1A 2B||1000||Nut 1"></textarea>
+                <div id="buttonScriptArea" style="flex: 1; min-height: 0; overflow-y: auto; padding: 10px; display: none;"></div>
                 <div class="script-controls">
                     <button class="btn-primary" id="btnRunScript" style="flex: 1;">Run Script</button>
                     <button class="btn-danger" id="btnStopScript" style="flex: 1;" disabled>Stop</button>
@@ -501,9 +538,13 @@
         const btnRunScript = document.getElementById('btnRunScript');
         const btnStopScript = document.getElementById('btnStopScript');
         const cbAutoScroll = document.getElementById('autoScroll');
+        const scriptMode = document.getElementById('scriptMode');
+        const scriptCycle = document.getElementById('scriptCycle');
+        const cycleLabel = document.getElementById('cycleLabel');
+        const buttonScriptArea = document.getElementById('buttonScriptArea');
+        let stopScriptFlag = false;
 
         let isScriptRunning = false;
-        let stopScriptFlag = false;
 
         let txCounter = 0;
         let rxCounter = 0;
@@ -607,6 +648,9 @@
         toggleStandaloneView('cbViewPlotter', '.chart-container');
         toggleStandaloneView('cbViewGuide', '.guide-container');
 
+        // --- DASHBOARD CONFIG STORE ---
+        window.dashboardConfig = null;
+
         // --- Iframe Bus Logic (Share Serial) ---
         window.addEventListener('message', (e) => {
             if (!e.data || !e.data.type) return;
@@ -615,6 +659,14 @@
                 document.querySelector('.script-container').style.display = e.data.show ? 'flex' : 'none';
                 const hResizer = document.getElementById('h-resizer');
                 if (hResizer) hResizer.style.display = e.data.show ? 'block' : 'none';
+                return;
+            }
+            if (e.data.type === 'SYNC_DASHBOARD_CONFIG') {
+                window.dashboardConfig = e.data.data;
+                return;
+            }
+            if (e.data.type === 'SEND_CMD') {
+                if (e.data.cmd) sendData(e.data.cmd, true, true);
                 return;
             }
             
@@ -952,9 +1004,23 @@
             const filename = `Terminal_Log_${isAuto ? 'AutoSave_' : ''}${new Date().getTime()}.${type}`;
             
             if (type === 'xlsx') {
-                const ws = XLSX.utils.json_to_sheet(logData);
+                const asciiData = logData.filter(r => r.IsHex === 'NO' || r.Type === 'SYS');
+                const hexData = logData.filter(r => r.IsHex === 'YES' || r.Type === 'SYS');
+                
                 const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Terminal Log");
+                if (asciiData.length > 0) {
+                    const wsAscii = XLSX.utils.json_to_sheet(asciiData);
+                    XLSX.utils.book_append_sheet(wb, wsAscii, "ASCII Log");
+                }
+                if (hexData.length > 0) {
+                    const wsHex = XLSX.utils.json_to_sheet(hexData);
+                    XLSX.utils.book_append_sheet(wb, wsHex, "HEX Log");
+                }
+                // Nếu cả 2 mảng trống (không thể xảy ra do check length bên trên, nhưng để an toàn)
+                if (wb.SheetNames.length === 0) {
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{Msg: "No Data"}]), "Empty");
+                }
+                
                 XLSX.writeFile(wb, filename);
             } 
             else if (type === 'csv') {
@@ -983,48 +1049,171 @@
                 a.click();
             }
         }
+        // --- View Toggles ---
+        scriptMode.addEventListener('change', () => {
+            if (scriptMode.value === 'button') {
+                syncTextToButton();
+                scriptArea.style.display = 'none';
+                buttonScriptArea.style.display = 'block';
+                cycleLabel.style.display = 'inline-block';
+            } else {
+                if (buttonScriptArea.style.display === 'block') syncButtonToText();
+                buttonScriptArea.style.display = 'none';
+                scriptArea.style.display = 'block';
+                cycleLabel.style.display = 'none';
+            }
+            saveScriptToStorage();
+        });
+
+        function syncTextToButton() {
+            buttonScriptArea.innerHTML = '';
+            const lines = scriptArea.value.split('\n');
+            let index = 1;
+            let lastDesc = "";
+            for (let line of lines) {
+                line = line.trim();
+                if (!line) continue;
+                if (line.startsWith('#')) {
+                    lastDesc = line.substring(1).trim();
+                    continue;
+                }
+                
+                let parts = line.split('||');
+                let cmd = parts[0] ? parts[0].trim() : '';
+                let delay = parts[1] ? parts[1].trim() : '1000';
+                let desc = parts[2] ? parts[2].trim() : (lastDesc || `Play ${index}`);
+                lastDesc = "";
+                
+                const row = document.createElement('div');
+                row.className = 'btn-script-row';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = true;
+                
+                const btn = document.createElement('button');
+                btn.className = 'btn-secondary small';
+                btn.style.width = '100px';
+                btn.style.overflow = 'hidden';
+                btn.style.textOverflow = 'ellipsis';
+                btn.textContent = desc;
+                btn.title = 'Bấm để gửi lệnh này ngay';
+                btn.onclick = () => {
+                    const rowCmd = cmdInput.value;
+                    if (rowCmd) sendData(rowCmd, true);
+                };
+                
+                const cmdInput = document.createElement('input');
+                cmdInput.type = 'text';
+                cmdInput.value = cmd;
+                cmdInput.placeholder = 'Lệnh (VD: $1A)';
+                
+                const delayInput = document.createElement('input');
+                delayInput.type = 'number';
+                delayInput.value = delay;
+                delayInput.min = "0";
+                delayInput.placeholder = 'Delay';
+                
+                row.appendChild(checkbox);
+                row.appendChild(btn);
+                row.appendChild(cmdInput);
+                row.appendChild(delayInput);
+                
+                buttonScriptArea.appendChild(row);
+                index++;
+            }
+            if (buttonScriptArea.innerHTML === '') {
+                buttonScriptArea.innerHTML = '<div style="color: var(--text-color); font-style: italic; font-size: 0.9em;">(Chưa có lệnh nào)</div>';
+            }
+        }
+
+        function syncButtonToText() {
+            if (buttonScriptArea.style.display === 'none') return;
+            
+            let lines = [];
+            let rows = buttonScriptArea.querySelectorAll('.btn-script-row');
+            rows.forEach(row => {
+                let btn = row.querySelector('button');
+                let inputs = row.querySelectorAll('input');
+                let cmd = inputs[1].value;
+                let delay = inputs[2].value;
+                let desc = btn.textContent;
+                lines.push(`${cmd}||${delay}||${desc}`);
+            });
+            
+            scriptArea.value = lines.join('\n');
+            scriptWorkbook[currentScriptSheet] = scriptArea.value;
+        }
 
         // --- Script Runner & Import/Export ---
         btnRunScript.addEventListener('click', async () => {
-            const scriptText = scriptArea.value;
-            if (!scriptText.trim()) return logSys("Kịch bản trống!", true);
-            if (!isConnected) return logSys("Vui lòng kết nối trước!", true);
-
-            const lines = scriptText.split('\n');
-            isScriptRunning = true;
-            stopScriptFlag = false;
+            let commandsToRun = [];
             
+            if (scriptMode.value === 'button') {
+                let rows = buttonScriptArea.querySelectorAll('.btn-script-row');
+                rows.forEach(row => {
+                    let checkbox = row.querySelector('input[type="checkbox"]');
+                    if (checkbox.checked) {
+                        let inputs = row.querySelectorAll('input');
+                        commandsToRun.push({
+                            cmd: inputs[1].value,
+                            delay: parseInt(inputs[2].value) || 1000
+                        });
+                    }
+                });
+            } else {
+                const lines = scriptArea.value.split('\n');
+                for (let line of lines) {
+                    line = line.trim();
+                    if (!line || line.startsWith('#')) continue;
+                    let parts = line.split('||');
+                    commandsToRun.push({
+                        cmd: parts[0] ? parts[0].trim() : '',
+                        delay: parts[1] ? parseInt(parts[1].trim()) : 1000
+                    });
+                }
+            }
+
+            if (commandsToRun.length === 0) {
+                return alert("Không có lệnh hợp lệ nào để chạy!");
+            }
+
+            let cycles = 1;
+            if (scriptMode.value === 'button') {
+                cycles = parseInt(scriptCycle.value) || 1;
+            }
+
             btnRunScript.disabled = true;
             btnStopScript.disabled = false;
-            scriptArea.disabled = true;
+            if (scriptMode.value === 'text') scriptArea.disabled = true;
+            stopScriptFlag = false;
+            isScriptRunning = true;
+
+            logSys(`=== BẮT ĐẦU CHẠY KỊCH BẢN (${cycles} CHU KỲ) ===`);
             
-            logSys("=== BẮT ĐẦU CHẠY KỊCH BẢN ===");
-            for (let i = 0; i < lines.length; i++) {
-                if (stopScriptFlag) {
-                    logSys("Đã dừng kịch bản.");
-                    break;
+            for (let c = 1; c <= cycles; c++) {
+                if (stopScriptFlag) break;
+                if (cycles > 1) logSys(`--- Đang chạy chu kỳ ${c}/${cycles} ---`);
+                
+                for (let item of commandsToRun) {
+                    if (stopScriptFlag) {
+                        logSys("Đã dừng kịch bản.");
+                        break;
+                    }
+                    if (item.cmd) {
+                        await sendData(item.cmd, true);
+                    }
+                    if (item.delay > 0) {
+                        await new Promise(resolve => setTimeout(resolve, item.delay));
+                    }
                 }
-                
-                let line = lines[i].trim();
-                if (line === '' || line.startsWith('#')) continue;
-                
-                let delay = 500;
-                let cmd = line;
-                if (line.includes('||')) {
-                    const parts = line.split('||');
-                    cmd = parts[0]; // Không trim để giữ lại các khoảng trắng hoặc \t nếu người dùng cố ý nhập
-                    delay = parseInt(parts[1].trim()) || 500;
-                }
-                
-                await sendData(cmd, true);
-                if (delay > 0) await new Promise(r => setTimeout(r, delay));
             }
+
             if (!stopScriptFlag) logSys("=== HOÀN THÀNH KỊCH BẢN ===");
-            
-            isScriptRunning = false;
             btnRunScript.disabled = false;
             btnStopScript.disabled = true;
             scriptArea.disabled = false;
+            isScriptRunning = false;
         });
 
         btnStopScript.addEventListener('click', () => { stopScriptFlag = true; });
@@ -1032,7 +1221,42 @@
         // --- Script Workbook Management ---
         let scriptWorkbook = { "Sheet1": scriptArea.value };
         let currentScriptSheet = "Sheet1";
-        const scriptSheetSelector = document.getElementById('scriptSheetSelector');
+        
+        function saveScriptToStorage() {
+            try {
+                if (scriptMode.value === 'button') {
+                    syncButtonToText();
+                } else {
+                    scriptWorkbook[currentScriptSheet] = scriptArea.value;
+                }
+                localStorage.setItem('hshop_scriptWorkbook', JSON.stringify(scriptWorkbook));
+                localStorage.setItem('hshop_currentScriptSheet', currentScriptSheet);
+                localStorage.setItem('hshop_scriptMode', scriptMode.value);
+            } catch(e) {
+                console.error("Lỗi lưu localStorage:", e);
+            }
+        }
+
+        function loadScriptFromStorage() {
+            try {
+                const stored = localStorage.getItem('hshop_scriptWorkbook');
+                const storedSheet = localStorage.getItem('hshop_currentScriptSheet');
+                const storedMode = localStorage.getItem('hshop_scriptMode');
+                if (stored) {
+                    scriptWorkbook = JSON.parse(stored);
+                }
+                if (storedSheet && scriptWorkbook[storedSheet]) {
+                    currentScriptSheet = storedSheet;
+                } else {
+                    currentScriptSheet = Object.keys(scriptWorkbook)[0] || "Sheet1";
+                }
+                if (storedMode) {
+                    scriptMode.value = storedMode;
+                }
+            } catch(e) {
+                console.error("Lỗi đọc localStorage:", e);
+            }
+        }
         
         function updateScriptSheetUI() {
             scriptSheetSelector.innerHTML = '';
@@ -1044,15 +1268,22 @@
             }
             scriptSheetSelector.value = currentScriptSheet;
             scriptArea.value = scriptWorkbook[currentScriptSheet];
+            if (scriptMode.value === 'button') syncTextToButton();
         }
         
         scriptSheetSelector.addEventListener('change', (e) => {
+            if (scriptMode.value === 'button') syncButtonToText();
+            else scriptWorkbook[currentScriptSheet] = scriptArea.value;
+            
             currentScriptSheet = e.target.value;
             scriptArea.value = scriptWorkbook[currentScriptSheet];
+            if (scriptMode.value === 'button') syncTextToButton();
+            saveScriptToStorage();
         });
         
         scriptArea.addEventListener('input', () => {
             scriptWorkbook[currentScriptSheet] = scriptArea.value;
+            saveScriptToStorage();
         });
         
         document.getElementById('btnAddSheet').addEventListener('click', () => {
@@ -1061,6 +1292,7 @@
                 scriptWorkbook[name] = "";
                 currentScriptSheet = name;
                 updateScriptSheetUI();
+                saveScriptToStorage();
             } else if (scriptWorkbook[name]) {
                 alert("Tên Sheet đã tồn tại!");
             }
@@ -1075,13 +1307,24 @@
                 delete scriptWorkbook[currentScriptSheet];
                 currentScriptSheet = Object.keys(scriptWorkbook)[0];
                 updateScriptSheetUI();
+                saveScriptToStorage();
             }
         });
         
         // Khởi tạo giao diện Sheet lúc load
+        loadScriptFromStorage();
         updateScriptSheetUI();
+        scriptMode.dispatchEvent(new Event('change'));
+
+        // Tự động lưu khi người dùng chỉnh sửa trong Button Mode
+        buttonScriptArea.addEventListener('input', () => {
+            saveScriptToStorage();
+        });
 
         function exportScript(type) {
+            if (scriptMode.value === 'button') syncButtonToText();
+            else scriptWorkbook[currentScriptSheet] = scriptArea.value;
+
             if (type === 'xlsx') {
                 const wb = XLSX.utils.book_new();
                 for (let sheetName in scriptWorkbook) {
@@ -1100,8 +1343,9 @@
                             let delay = 500;
                             if (line.includes('||')) {
                                 const parts = line.split('||');
-                                cmd = parts[0];
+                                cmd = parts[0] ? parts[0].trim() : '';
                                 delay = parseInt(parts[1].trim()) || 500;
+                                if (parts[2]) lastDesc = parts[2].trim();
                             }
                             arr2D.push([cmd, delay, lastDesc]);
                             lastDesc = ""; // reset cho dòng sau
@@ -1110,6 +1354,17 @@
                     const ws = XLSX.utils.aoa_to_sheet(arr2D);
                     XLSX.utils.book_append_sheet(wb, ws, sheetName);
                 }
+                
+                // --- Kèm thêm Dashboard Config nếu có ---
+                if (window.dashboardConfig) {
+                    const cfgData = [
+                        ["Key", "JSONData"],
+                        ["dashboardConfig", JSON.stringify(window.dashboardConfig)]
+                    ];
+                    const cfgWs = XLSX.utils.aoa_to_sheet(cfgData);
+                    XLSX.utils.book_append_sheet(wb, cfgWs, "DashboardConfig");
+                }
+
                 XLSX.writeFile(wb, `Script_Workbook_${new Date().getTime()}.xlsx`);
             } else if (type === 'txt') {
                 const text = scriptWorkbook[currentScriptSheet];
@@ -1137,8 +1392,32 @@
                         const arr2D = XLSX.utils.sheet_to_json(ws, {header: 1});
                         let scriptText = "";
                         
-                        // Bỏ qua dòng tiêu đề (index 0)
-                        for (let i = 1; i < arr2D.length; i++) {
+                        // --- Xử lý riêng sheet DashboardConfig ---
+                        if (sheetName === "DashboardConfig") {
+                            // Cấu trúc mảng 2D: [["Key", "JSONData"], ["dashboardConfig", "{...}"]]
+                            if (arr2D[1] && arr2D[1][1]) {
+                                try {
+                                    const parsedConfig = JSON.parse(arr2D[1][1]);
+                                    if (window.parent !== window) {
+                                        window.parent.postMessage({ type: 'LOAD_DASHBOARD_CONFIG', data: parsedConfig }, '*');
+                                    }
+                                } catch (err) {
+                                    console.error("Lỗi khi parse DashboardConfig:", err);
+                                }
+                            }
+                            return; // Bỏ qua không nạp vào scriptWorkbook
+                        }
+
+                        // Tự động phát hiện dòng tiêu đề
+                        let startIndex = 0;
+                        if (arr2D.length > 0 && arr2D[0] && arr2D[0].length > 0) {
+                            const firstCell = String(arr2D[0][0]).toLowerCase().trim();
+                            if (firstCell === "command" || firstCell === "lệnh" || firstCell === "lenh") {
+                                startIndex = 1;
+                            }
+                        }
+
+                        for (let i = startIndex; i < arr2D.length; i++) {
                             const row = arr2D[i];
                             if (!row || row.length === 0) continue;
                             const cmd = row[0] || "";
@@ -1146,8 +1425,11 @@
                             const desc = row[2] || "";
                             
                             if (cmd) {
-                                if (desc) scriptText += `# ${desc}\n`;
-                                scriptText += `${cmd}||${delay}\n`;
+                                scriptText += `${cmd}||${delay}`;
+                                if (desc) {
+                                    scriptText += `||${desc}`;
+                                }
+                                scriptText += `\n`;
                             }
                         }
                         scriptWorkbook[sheetName] = scriptText.trim();
@@ -1159,10 +1441,12 @@
                     currentScriptSheet = Object.keys(scriptWorkbook)[0];
                     updateScriptSheetUI();
                     logSys(`Đã nạp file Excel chứa ${Object.keys(scriptWorkbook).length} tập lệnh.`);
+                    saveScriptToStorage();
                 } else {
                     // Đọc TXT / CSV thông thường vào Sheet hiện tại
                     scriptWorkbook[currentScriptSheet] = new TextDecoder("utf-8").decode(data);
                     updateScriptSheetUI();
+                    saveScriptToStorage();
                 }
             };
             

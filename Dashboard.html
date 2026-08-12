@@ -34,160 +34,249 @@
         header h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
         
         .grid {
-            display: flex;
-            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            grid-auto-rows: minmax(50px, auto);
+            gap: 10px;
             padding: 10px;
-            gap: 10px;
-        }
-        
-        .col {
-            display: flex;
-            flex-direction: column;
             flex: 1;
-            gap: 10px;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
 
         iframe {
-            flex: 1;
             width: 100%;
             height: 100%;
             border: 1px solid var(--border);
             border-radius: 8px;
             background: #1e293b;
         }
-        
-        .terminal-col {
-            flex: 0 0 500px;
-        }
 
-        .toggle-group {
+        .shortcut-btn {
             display: flex;
-            gap: 15px;
-            font-size: 0.9rem;
             align-items: center;
-        }
-        .toggle-group label {
+            justify-content: center;
+            font-weight: bold;
+            border-radius: 8px;
+            border: none;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 5px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            color: #ffffff;
+            font-size: 1.1rem;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .shortcut-btn:active {
+            transform: scale(0.98);
         }
 
-        .v-resizer {
-            width: 8px;
-            cursor: col-resize;
-            background: transparent;
-            border-radius: 4px;
-            transition: background 0.2s;
-            margin: 0 -4px;
-            z-index: 10;
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); display: none;
+            justify-content: center; align-items: center; z-index: 1000;
         }
-        .v-resizer:hover, .v-resizer.resizing { background: rgba(59, 130, 246, 0.5); }
+        .modal {
+            background: var(--bg-color);
+            padding: 20px; border-radius: 8px;
+            width: 90%; max-width: 900px;
+            max-height: 90vh; overflow-y: auto;
+            border: 1px solid var(--border);
+        }
+        .modal h2 { margin-top: 0; }
+        .config-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }
+        .config-row input, .config-row select {
+            padding: 5px; border-radius: 4px; border: 1px solid var(--border);
+            background: #1e293b; color: #fff;
+        }
+        .btn-primary { background: var(--primary); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-danger { background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+
     </style>
 </head>
 <body>
     <header>
         <h1>Trạm điều khiển trung tâm (Dashboard)</h1>
-        <div class="toggle-group">
-            <label><input type="checkbox" checked onchange="toggleView('terminal-col')"> Terminal</label>
-            <label><input type="checkbox" id="cbScript" checked onchange="toggleScript()"> Script List</label>
-            <label><input type="checkbox" checked onchange="toggleView('plotter1')"> Plotter 1</label>
-            <label><input type="checkbox" checked onchange="toggleView('plotter2')"> Plotter 2</label>
+        <div class="toggle-group" style="display: flex; gap: 15px; align-items: center;">
+            <div id="header-view-toggles" style="display: flex; gap: 15px; flex-wrap: wrap;"></div>
+            <button class="btn-primary" onclick="openConfigModal()">Cài đặt Layout</button>
             <span style="color: #94a3b8; font-size: 0.8rem; margin-left: 20px;">* Chỉ cần Connect ở 1 cửa sổ, dữ liệu sẽ tự đồng bộ.</span>
         </div>
     </header>
     
-    <div class="grid">
-        <!-- Cột trái: Chỉ hiện Terminal & Script -->
-        <div class="col terminal-col" id="terminal-col">
-            <iframe src="Web_SerialPloter_Anti.html?hide=plotter,guide"></iframe>
-        </div>
-        
-        <div class="v-resizer" id="dashboard-v-resizer"></div>
+    <div class="grid" id="dashboard-grid">
+        <!-- Rendered dynamically -->
+    </div>
 
-        <div class="col" id="plotter-col">
-            <iframe id="plotter1" src="Web_SerialPloter_Anti.html?hide=terminal,script,guide,controls"></iframe>
-            <iframe id="plotter2" src="Web_SerialPloter_Anti.html?hide=terminal,script,guide,controls"></iframe>
+    <!-- Modal Cấu hình -->
+    <div class="modal-overlay" id="configModal">
+        <div class="modal">
+            <h2>Cấu hình Layout Dashboard</h2>
+            
+            <h3>Danh sách Views (Iframes)</h3>
+            <div id="viewsConfigArea"></div>
+            <button class="btn-primary" onclick="addViewConfig()" style="margin-bottom: 20px;">+ Thêm View</button>
+            <hr style="border: 1px solid var(--border);">
+            
+            <h3>Danh sách Shortcut Buttons</h3>
+            <div id="shortcutsConfigArea"></div>
+            <button class="btn-primary" onclick="addShortcutConfig()">+ Thêm Shortcut</button>
+            
+            <div style="margin-top: 30px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn-danger" onclick="closeConfigModal()">Hủy</button>
+                <button class="btn-primary" onclick="saveConfig()">Lưu & Hiển thị</button>
+            </div>
         </div>
     </div>
 
     <script>
-        // --- Ẩn hiện giao diện ---
-        function toggleView(id) {
-            const el = document.getElementById(id);
-            if (el.style.display === 'none') {
-                el.style.display = 'flex'; // Iframe or div
-            } else {
-                el.style.display = 'none';
-            }
+        let dashboardConfig = {
+            views: [
+                { id: "v1", url: "Web_SerialPloter_Anti.html?hide=plotter,guide", w: 6, h: 12 },
+                { id: "v2", url: "Web_SerialPloter_Anti.html?hide=terminal,script,guide,controls", w: 6, h: 6 },
+                { id: "v3", url: "Web_SerialPloter_Anti.html?hide=terminal,script,guide,controls", w: 6, h: 6 }
+            ],
+            shortcuts: []
+        };
 
-            const p1 = document.getElementById('plotter1').style.display !== 'none';
-            const p2 = document.getElementById('plotter2').style.display !== 'none';
-            const plotterCol = document.getElementById('plotter-col');
-            const vResizer = document.getElementById('dashboard-v-resizer');
-            const terminalCol = document.getElementById('terminal-col');
+        function renderDashboard() {
+            const grid = document.getElementById('dashboard-grid');
+            grid.innerHTML = '';
             
-            if (!p1 && !p2) {
-                if (plotterCol) plotterCol.style.display = 'none';
-                if (vResizer) vResizer.style.display = 'none';
-                terminalCol.style.width = '100%';
-                terminalCol.style.flex = '1';
-            } else {
-                if (plotterCol) plotterCol.style.display = 'flex';
-                if (vResizer) vResizer.style.display = 'block';
-            }
+            const headerToggles = document.getElementById('header-view-toggles');
+            headerToggles.innerHTML = '';
+            
+            dashboardConfig.views.forEach((v, idx) => {
+                if (v.visible === undefined) v.visible = true; // Default
+                
+                // Add to Header Toggles
+                const label = document.createElement('label');
+                label.style.cursor = 'pointer';
+                label.style.display = 'flex';
+                label.style.alignItems = 'center';
+                label.style.gap = '5px';
+                label.innerHTML = `<input type="checkbox" ${v.visible ? 'checked' : ''} onchange="toggleViewVisible(${idx}, this.checked)"> View ${idx + 1}`;
+                headerToggles.appendChild(label);
+                
+                if (v.visible) {
+                    const ifr = document.createElement('iframe');
+                    ifr.src = v.url;
+                    ifr.style.gridColumn = `span ${v.w}`;
+                    ifr.style.gridRow = `span ${v.h}`;
+                    grid.appendChild(ifr);
+                }
+            });
+            
+            dashboardConfig.shortcuts.forEach((s, idx) => {
+                if (s.visible === undefined) s.visible = true;
+                
+                if (s.visible) {
+                    const btn = document.createElement('button');
+                    btn.className = 'shortcut-btn';
+                    btn.textContent = s.label;
+                    btn.style.backgroundColor = s.color || '#3b82f6';
+                    btn.style.gridColumn = `span ${s.w}`;
+                    btn.style.gridRow = `span ${s.h}`;
+                    btn.onclick = () => {
+                        broadcastMessage({ type: 'SEND_CMD', cmd: s.cmd });
+                    };
+                    grid.appendChild(btn);
+                }
+            });
+
+            // Gửi config xuống iframes để chuẩn bị Export nếu cần
+            setTimeout(() => {
+                broadcastMessage({ type: 'SYNC_DASHBOARD_CONFIG', data: dashboardConfig });
+            }, 1000); // Đợi iframe load xong
         }
 
-        function toggleScript() {
-            const isChecked = document.getElementById('cbScript').checked;
-            const iframe = document.querySelector('.terminal-col iframe');
-            if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage({ type: 'TOGGLE_SCRIPT', show: isChecked }, '*');
-            }
+        function toggleViewVisible(idx, isVisible) {
+            dashboardConfig.views[idx].visible = isVisible;
+            renderDashboard();
         }
 
-        // --- Kéo thả đổi kích thước ---
-        const vResizer = document.getElementById('dashboard-v-resizer');
-        const terminalCol = document.getElementById('terminal-col');
-        let isResizing = false;
-
-        vResizer.addEventListener('mousedown', () => {
-            isResizing = true;
-            document.body.style.cursor = 'col-resize';
-            vResizer.classList.add('resizing');
-            // Chặn iframe nuốt sự kiện chuột khi đang kéo
-            document.querySelectorAll('iframe').forEach(ifr => ifr.style.pointerEvents = 'none');
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-            const newWidth = e.clientX - terminalCol.getBoundingClientRect().left;
-            if (newWidth > 300 && newWidth < window.innerWidth - 300) {
-                terminalCol.style.width = newWidth + 'px';
-                terminalCol.style.flex = 'none';
-            }
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (isResizing) {
-                isResizing = false;
-                document.body.style.cursor = 'default';
-                vResizer.classList.remove('resizing');
-                document.querySelectorAll('iframe').forEach(ifr => ifr.style.pointerEvents = 'auto');
-            }
-        });
-
-        // --- Iframe Bus Router ---
-        // Bắt mọi tín hiệu từ các Iframe con và phát lại (Relay) cho các Iframe còn lại
-        window.addEventListener('message', (e) => {
+        function broadcastMessage(msg) {
             const iframes = document.querySelectorAll('iframe');
             iframes.forEach(iframe => {
-                // Không gửi ngược lại cho chính Iframe vừa phát tín hiệu
+                if (iframe.contentWindow) iframe.contentWindow.postMessage(msg, '*');
+            });
+        }
+
+        // --- Iframe Bus Router ---
+        window.addEventListener('message', (e) => {
+            if (e.data && e.data.type === 'LOAD_DASHBOARD_CONFIG') {
+                dashboardConfig = e.data.data;
+                renderDashboard();
+                return;
+            }
+
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(iframe => {
                 if (iframe.contentWindow !== e.source) {
                     iframe.contentWindow.postMessage(e.data, '*');
                 }
             });
         });
+
+        // --- Modal Logic ---
+        function openConfigModal() {
+            renderConfigForms();
+            document.getElementById('configModal').style.display = 'flex';
+        }
+        function closeConfigModal() {
+            document.getElementById('configModal').style.display = 'none';
+        }
+
+        function renderConfigForms() {
+            const vArea = document.getElementById('viewsConfigArea');
+            vArea.innerHTML = '';
+            dashboardConfig.views.forEach((v, idx) => {
+                const div = document.createElement('div');
+                div.className = 'config-row';
+                div.innerHTML = `
+                    <span style="width: 50px; font-weight: bold;">View ${idx+1}:</span>
+                    <input type="checkbox" ${v.visible !== false ? 'checked' : ''} title="Hiển thị View này" onchange="dashboardConfig.views[${idx}].visible=this.checked">
+                    <input type="text" value="${v.url}" placeholder="URL (vd: ?hide=...)" style="flex: 1; min-width: 300px;" onchange="dashboardConfig.views[${idx}].url=this.value">
+                    <span>Width:</span><input type="number" value="${v.w}" min="1" max="12" style="width: 50px" onchange="dashboardConfig.views[${idx}].w=parseInt(this.value)||1">
+                    <span>Height:</span><input type="number" value="${v.h}" min="1" style="width: 50px" onchange="dashboardConfig.views[${idx}].h=parseInt(this.value)||1">
+                    <button class="btn-danger" onclick="dashboardConfig.views.splice(${idx}, 1); renderConfigForms()">Xóa</button>
+                `;
+                vArea.appendChild(div);
+            });
+
+            const sArea = document.getElementById('shortcutsConfigArea');
+            sArea.innerHTML = '';
+            dashboardConfig.shortcuts.forEach((s, idx) => {
+                const div = document.createElement('div');
+                div.className = 'config-row';
+                div.innerHTML = `
+                    <span style="width: 50px; font-weight: bold;">Nút ${idx+1}:</span>
+                    <input type="checkbox" ${s.visible !== false ? 'checked' : ''} title="Hiển thị Shortcut này" onchange="dashboardConfig.shortcuts[${idx}].visible=this.checked">
+                    <input type="text" value="${s.label}" placeholder="Tên Nút" style="width: 150px;" onchange="dashboardConfig.shortcuts[${idx}].label=this.value">
+                    <input type="text" value="${s.cmd}" placeholder="Lệnh gửi" style="flex: 1;" onchange="dashboardConfig.shortcuts[${idx}].cmd=this.value">
+                    <input type="color" value="${s.color || '#3b82f6'}" style="width: 40px; height: 35px; padding: 0;" onchange="dashboardConfig.shortcuts[${idx}].color=this.value">
+                    <span>Width:</span><input type="number" value="${s.w}" min="1" max="12" style="width: 50px" onchange="dashboardConfig.shortcuts[${idx}].w=parseInt(this.value)||1">
+                    <span>Height:</span><input type="number" value="${s.h}" min="1" style="width: 50px" onchange="dashboardConfig.shortcuts[${idx}].h=parseInt(this.value)||1">
+                    <button class="btn-danger" onclick="dashboardConfig.shortcuts.splice(${idx}, 1); renderConfigForms()">Xóa</button>
+                `;
+                sArea.appendChild(div);
+            });
+        }
+
+        function addViewConfig() {
+            dashboardConfig.views.push({ url: "Web_SerialPloter_Anti.html", w: 6, h: 6 });
+            renderConfigForms();
+        }
+        function addShortcutConfig() {
+            dashboardConfig.shortcuts.push({ label: "Nút mới", cmd: "", color: "#3b82f6", w: 3, h: 1 });
+            renderConfigForms();
+        }
+        function saveConfig() {
+            renderDashboard();
+            closeConfigModal();
+        }
+
+        // Khởi tạo ban đầu
+        renderDashboard();
     </script>
 </body>
 </html>
