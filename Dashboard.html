@@ -128,6 +128,11 @@
                 <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">
                     Cú pháp hỗ trợ: <code>{YY}</code> (Năm 2 số), <code>{MM}</code> (Tháng), <code>{DD}</code> (Ngày), <code>{INDEX}</code> (Stt tự tăng 001, 002...), <code>{TYPE}</code> (Script/Terminal/Plotter), <code>{NAME}</code> (Tên gốc).
                 </div>
+                <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 0.85rem; color: var(--text-color);">Chỉ số INDEX tiếp theo trong ngày:</span>
+                    <input type="number" id="currentIndexInput" min="1" style="width: 80px; padding: 4px 8px; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-color); border-radius: 4px;" value="1">
+                    <button class="btn-secondary" onclick="resetCurrentIndex()" style="background: var(--border); color: var(--text-color); border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Đặt về 001</button>
+                </div>
             </div>
             <hr style="border: 1px solid var(--border);">
             
@@ -488,6 +493,16 @@
                 patternInput.value = dashboardConfig.namingPattern || "Y{YY}{MM}{DD}_{INDEX}_{TYPE}_{NAME}";
             }
 
+            const now = new Date();
+            const yy = String(now.getFullYear()).slice(-2);
+            const MM = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const dateStr = `${yy}${MM}${dd}`;
+            const counterKey = `hshop_export_index_${dateStr}`;
+            const nextIndex = parseInt(localStorage.getItem(counterKey) || '0') + 1;
+            const indexInput = document.getElementById('currentIndexInput');
+            if (indexInput) indexInput.value = nextIndex;
+
             const vArea = document.getElementById('viewsConfigArea');
             vArea.innerHTML = '';
             dashboardConfig.views.forEach((v, idx) => {
@@ -549,10 +564,27 @@
             } catch(e) { console.warn("Lỗi nạp config từ localStorage:", e); }
         }
 
+        function resetCurrentIndex() {
+            const indexInput = document.getElementById('currentIndexInput');
+            if (indexInput) indexInput.value = 1;
+        }
+
         function saveConfig() {
             const patternInput = document.getElementById('namingPatternInput');
             if (patternInput && patternInput.value.trim()) {
                 dashboardConfig.namingPattern = patternInput.value.trim();
+            }
+
+            const indexInput = document.getElementById('currentIndexInput');
+            if (indexInput && indexInput.value) {
+                const now = new Date();
+                const yy = String(now.getFullYear()).slice(-2);
+                const MM = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                const dateStr = `${yy}${MM}${dd}`;
+                const counterKey = `hshop_export_index_${dateStr}`;
+                const val = Math.max(1, parseInt(indexInput.value) || 1);
+                localStorage.setItem(counterKey, val - 1);
             }
 
             saveConfigToStorage();
