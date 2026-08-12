@@ -58,6 +58,8 @@
 - **Xuất/Nhập dữ liệu chuẩn Excel (XLSX):**
   - Tích hợp thư viện `SheetJS`.
   - Thay thế toàn bộ tính năng export mặc định sang định dạng `xlsx` (bao gồm Terminal, Plotter và Script List).
+  - Tích hợp **File System Access API** (chỉ có trên Chrome/Edge): cho phép hiện hộp thoại "Save As" chuyên nghiệp, có thể lưu chép đè file cũ thay vì tải nhiều file rác vào Downloads.
+  - Cho phép người dùng chọn và ghi nhớ **Thư mục làm việc mặc định (Workspace)** trong mục "Cài đặt Layout". Tự động tự động phân loại và mở trực tiếp tới các thư mục con tương ứng (`Workspace/Terminal/`, `Workspace/Script/`, `Workspace/Plotter/`) mỗi khi Export/Import.
 - **Quản lý kịch bản đa Sheet (Multi-Sheet Script):**
   - Chuyển Script List thành một phần mềm quản lý kịch bản thu nhỏ.
   - Cho phép tạo, xóa, chuyển đổi các Sheet lệnh trực tiếp trên Web.
@@ -72,12 +74,11 @@
 - **Tuỳ biến Module linh hoạt:**
   - Tự động thay đổi kích thước và đẩy Full-width cho Terminal khi Plotter bị ẩn.
   - Tích hợp bộ điều khiển Checkbox tổng lên thanh điều hướng của `Dashboard.html`.
-- **Nâng cấp Button Script List (Giao diện nút bấm & Panel HMI):**
-  - Chuyển đổi qua lại linh hoạt giữa 3 chế độ: Text (viết mã), Button (nút bấm trực quan) và Panel (Bảng điều khiển).
+- **Nâng cấp Button Script List (Giao diện dạng Form trực quan):**
+  - Chuyển đổi qua lại linh hoạt giữa 2 chế độ: Text Mode (nhập văn bản thô) và Button Mode (Giao diện dạng danh sách nhập liệu).
   - Ở chế độ Button: 
-    - Hiển thị trực quan dưới dạng danh sách, hỗ trợ nhập Command, Delay, Color, Width, Height cho từng nút.
-    - Cho phép Enable/Disable từng lệnh bằng Checkbox để chọn lọc chạy, hỗ trợ Chu kỳ (Cycles).
-  - Ở chế độ Panel:
-    - Trực quan hóa các lệnh thành một bảng điều khiển (Dashboard HMI) sử dụng CSS Grid 12 cột.
-    - Các nút có thể tùy biến kích thước và màu sắc, bấm là chạy ngay lập tức.
-  - Hỗ trợ lưu trữ toàn bộ cấu hình UI (Color, Width, Height) vào file Excel.
+    - Hiển thị kịch bản dưới dạng danh sách trực quan, hỗ trợ ô nhập liệu riêng biệt cho Command và Delay ở từng dòng lệnh.
+    - Tích hợp Checkbox ở mỗi lệnh cho phép người dùng bật/tắt tạm thời lệnh đó khỏi chuỗi thực thi chung.
+    - Hỗ trợ chức năng lặp lại toàn bộ kịch bản theo số lượng Chu kỳ (Cycles) chỉ định.
+    - Mỗi lệnh có thêm một nút bấm (Button) đại diện chứa mô tả, hỗ trợ click trực tiếp để truyền ngay lệnh đó xuống thiết bị.
+  - Tự động đồng bộ và lưu trữ kịch bản (chuẩn 3 cột: Command - Delay - Description) xuống file Excel và LocalStorage.

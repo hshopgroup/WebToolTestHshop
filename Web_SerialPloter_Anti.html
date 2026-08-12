@@ -447,8 +447,8 @@
                         <span id="cycleLabel" style="display: none; white-space: nowrap;">Chu kỳ: <input type="number" id="scriptCycle" value="1" min="1" style="width: 50px; padding: 2px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-color); color: var(--text-color);"></span>
                     </div>
                     <div class="header-actions">
-                        <input type="file" id="scriptFileInput" accept=".txt,.csv,.xlsx" onchange="importScript(event)">
-                        <button class="btn-secondary small" onclick="document.getElementById('scriptFileInput').click()">Import</button>
+                        <input type="file" id="scriptFileInput" accept=".txt,.csv,.xlsx" onchange="importScript(event)" style="display: none;">
+                        <button class="btn-secondary small" onclick="handleImportClick()">Import</button>
                         <button class="btn-primary small" onclick="exportScript('xlsx')">Export XLSX</button>
                         <button class="btn-secondary small" onclick="exportScript('txt')">TXT</button>
                     </div>
@@ -522,6 +522,95 @@
     </div>
 
     <script>
+        // --- IndexedDB for FSA API ---
+        const DB_NAME = 'Hshop_FSA_DB';
+        const STORE_NAME = 'handles';
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = e => {
+                    e.target.result.createObjectStore(STORE_NAME);
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function getHandle(key) {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const req = tx.objectStore(STORE_NAME).get(key);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function saveToFile(blob, defaultName, isAuto = false, subFolder = null) {
+            try {
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'FSA_SAVE_FILE',
+                        blob: blob,
+                        defaultName: defaultName,
+                        isAuto: isAuto,
+                        subFolder: subFolder
+                    }, '*');
+                    return;
+                }
+                
+                let dirHandle = null;
+                try { dirHandle = await getHandle('workspace_dir'); } catch(e) {}
+                
+                if (isAuto && dirHandle) {
+                    try {
+                        const fileHandle = await dirHandle.getFileHandle(defaultName, { create: true });
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        logSys("Đã tự động lưu log vào " + defaultName, false);
+                        return;
+                    } catch(err) {
+                        console.warn("Direct write failed, falling back", err);
+                    }
+                }
+                
+                if (!isAuto && window.showSaveFilePicker) {
+                    let opts = { suggestedName: defaultName };
+                    if (dirHandle) opts.startIn = dirHandle;
+                    
+                    try {
+                        const fileHandle = await window.showSaveFilePicker(opts);
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        return;
+                    } catch(e) {
+                        if (e.name === 'AbortError') return;
+                        if (e.message.includes('Cross origin') || e.name === 'SecurityError' || e.name === 'NotAllowedError') {
+                            console.warn("showSaveFilePicker block by policy, fallback to <a> download");
+                        } else {
+                            throw e;
+                        }
+                    }
+                } 
+                
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = defaultName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            } catch(e) {
+                if (e.name !== 'AbortError') {
+                    console.error("Lỗi lưu file:", e);
+                    alert("Không thể lưu file: " + e.message);
+                }
+            }
+        }
+
         // --- Web Serial API Logic ---
         let port;
         let reader;
@@ -593,6 +682,10 @@
             }
         }
         
+        const subFolderTerminal = "Terminal";
+        const subFolderScript = "Script";
+        const subFolderPlotter = "Plotter";
+        
         // Hide view toggles if in iframe (Dashboard will handle it)
         if (window.parent !== window) {
             const vt = document.querySelector('.view-toggles');
@@ -654,6 +747,15 @@
         // --- Iframe Bus Logic (Share Serial) ---
         window.addEventListener('message', (e) => {
             if (!e.data || !e.data.type) return;
+            
+            if (e.data.type === 'FSA_FILE_OPENED') {
+                processImportedFile(e.data.file);
+                return;
+            }
+            if (e.data.type === 'FSA_FILE_FALLBACK') {
+                document.getElementById('scriptFileInput').click();
+                return;
+            }
             
             if (e.data.type === 'TOGGLE_SCRIPT') {
                 document.querySelector('.script-container').style.display = e.data.show ? 'flex' : 'none';
@@ -999,7 +1101,7 @@
             logSys("Đã xóa màn hình Terminal và bộ nhớ đệm.");
         }
 
-        function exportLog(type, isAuto = false) {
+        async function exportLog(type, isAuto = false) {
             if (logData.length === 0) return alert("Không có dữ liệu để xuất!");
             const filename = `Terminal_Log_${isAuto ? 'AutoSave_' : ''}${new Date().getTime()}.${type}`;
             
@@ -1016,12 +1118,13 @@
                     const wsHex = XLSX.utils.json_to_sheet(hexData);
                     XLSX.utils.book_append_sheet(wb, wsHex, "HEX Log");
                 }
-                // Nếu cả 2 mảng trống (không thể xảy ra do check length bên trên, nhưng để an toàn)
                 if (wb.SheetNames.length === 0) {
                     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{Msg: "No Data"}]), "Empty");
                 }
                 
-                XLSX.writeFile(wb, filename);
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                await saveToFile(blob, filename, isAuto, subFolderTerminal);
             } 
             else if (type === 'csv') {
                 let content = "Time,Type,IsHex,Data\n";
@@ -1030,11 +1133,7 @@
                     content += `"${row.Time}","${row.Type}","${row.IsHex}","${text}"\n`;
                 });
                 const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.click();
+                await saveToFile(blob, filename, isAuto, subFolderTerminal);
             } 
             else if (type === 'txt') {
                 let content = "";
@@ -1042,11 +1141,7 @@
                     content += `${row.Time} ${row.Data}\n`;
                 });
                 const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.click();
+                await saveToFile(blob, filename, isAuto, subFolderTerminal);
             }
         }
         // --- View Toggles ---
@@ -1321,7 +1416,7 @@
             saveScriptToStorage();
         });
 
-        function exportScript(type) {
+        async function exportScript(type) {
             if (scriptMode.value === 'button') syncButtonToText();
             else scriptWorkbook[currentScriptSheet] = scriptArea.value;
 
@@ -1365,21 +1460,67 @@
                     XLSX.utils.book_append_sheet(wb, cfgWs, "DashboardConfig");
                 }
 
-                XLSX.writeFile(wb, `Script_Workbook_${new Date().getTime()}.xlsx`);
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                await saveToFile(blob, `Script_Workbook_${new Date().getTime()}.xlsx`, false, subFolderScript);
             } else if (type === 'txt') {
                 const text = scriptWorkbook[currentScriptSheet];
                 const blob = new Blob([text], { type: 'text/plain' });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `script_${currentScriptSheet}_${new Date().getTime()}.${type}`;
-                a.click();
+                await saveToFile(blob, `script_${currentScriptSheet}_${new Date().getTime()}.${type}`, false, "Script");
+            }
+        }
+
+        async function handleImportClick() {
+            try {
+                if (window.parent !== window) {
+                    window.parent.postMessage({ type: 'FSA_OPEN_FILE', subFolder: "Script" }, '*');
+                    return;
+                }
+                
+                if (!window.showOpenFilePicker) {
+                    document.getElementById('scriptFileInput').click();
+                    return;
+                }
+                
+                let opts = {
+                    types: [{
+                        description: 'Script Files',
+                        accept: {
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+                            'text/plain': ['.txt', '.csv']
+                        }
+                    }]
+                };
+                try {
+                    const dirHandle = await getHandle('workspace_dir');
+                    if (dirHandle) opts.startIn = dirHandle;
+                } catch(e) {}
+                
+                try {
+                    const [fileHandle] = await window.showOpenFilePicker(opts);
+                    const file = await fileHandle.getFile();
+                    processImportedFile(file);
+                } catch(e) {
+                    if (e.name === 'AbortError') return;
+                    if (e.message.includes('Cross origin') || e.name === 'SecurityError' || e.name === 'NotAllowedError') {
+                        document.getElementById('scriptFileInput').click();
+                    } else {
+                        throw e;
+                    }
+                }
+            } catch (e) {
+                console.error(e);
             }
         }
 
         function importScript(event) {
             const file = event.target.files[0];
             if (!file) return;
-            
+            processImportedFile(file);
+            event.target.value = '';
+        }
+
+        function processImportedFile(file) {
             const reader = new FileReader();
             reader.onload = e => { 
                 const data = e.target.result;
@@ -1559,7 +1700,7 @@
             chart.resetZoom();
         }
 
-        function exportPlotter() {
+        async function exportPlotter() {
             if (chart.data.datasets.length === 0 || chart.data.datasets[0].data.length === 0) {
                 return alert("Không có dữ liệu đồ thị để xuất!");
             }
@@ -1577,7 +1718,10 @@
             const ws = XLSX.utils.json_to_sheet(finalArray);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Plotter Data");
-            XLSX.writeFile(wb, `Plotter_Data_${new Date().getTime()}.xlsx`);
+            
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            await saveToFile(blob, `Plotter_Data_${new Date().getTime()}.xlsx`, false, subFolderPlotter);
         }
 
         // --- Channel Settings Modal ---

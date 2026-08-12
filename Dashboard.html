@@ -117,6 +117,13 @@
             <button class="btn-primary" onclick="addViewConfig()" style="margin-bottom: 20px;">+ Thêm View</button>
             <hr style="border: 1px solid var(--border);">
             
+            <h3>Cài đặt Thư mục làm việc (Workspace)</h3>
+            <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                <button class="btn-secondary" onclick="selectWorkspace()" style="background: var(--border); color: var(--text-color); border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">Chọn thư mục mặc định</button>
+                <span id="workspaceStatus" style="color: #94a3b8; font-size: 0.9rem;">Chưa cấu hình</span>
+            </div>
+            <hr style="border: 1px solid var(--border);">
+            
             <h3>Danh sách Shortcut Buttons</h3>
             <div id="shortcutsConfigArea"></div>
             <button class="btn-primary" onclick="addShortcutConfig()">+ Thêm Shortcut</button>
@@ -129,6 +136,55 @@
     </div>
 
     <script>
+        // --- IndexedDB for FSA API ---
+        const DB_NAME = 'Hshop_FSA_DB';
+        const STORE_NAME = 'handles';
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = e => {
+                    e.target.result.createObjectStore(STORE_NAME);
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function saveHandle(key, handle) {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                tx.objectStore(STORE_NAME).put(handle, key);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function getHandle(key) {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const req = tx.objectStore(STORE_NAME).get(key);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function verifyPermission(fileHandle, readWrite) {
+            const options = {};
+            if (readWrite) {
+                options.mode = 'readwrite';
+            }
+            if ((await fileHandle.queryPermission(options)) === 'granted') {
+                return true;
+            }
+            if ((await fileHandle.requestPermission(options)) === 'granted') {
+                return true;
+            }
+            return false;
+        }
+
         let dashboardConfig = {
             views: [
                 { id: "v1", url: "Web_SerialPloter_Anti.html?hide=plotter,guide", w: 6, h: 12 },
@@ -159,7 +215,9 @@
                 
                 if (v.visible) {
                     const ifr = document.createElement('iframe');
-                    ifr.src = v.url;
+                    const viewName = `View ${idx + 1}`;
+                    const sep = v.url.includes('?') ? '&' : '?';
+                    ifr.src = `${v.url}${sep}viewName=${encodeURIComponent(viewName)}`;
                     ifr.style.gridColumn = `span ${v.w}`;
                     ifr.style.gridRow = `span ${v.h}`;
                     grid.appendChild(ifr);
@@ -202,7 +260,16 @@
         }
 
         // --- Iframe Bus Router ---
-        window.addEventListener('message', (e) => {
+        window.addEventListener('message', async (e) => {
+            if (e.data && e.data.type === 'FSA_SAVE_FILE') {
+                await saveToFileDashboard(e.data.blob, e.data.defaultName, e.data.isAuto, e.data.subFolder);
+                return;
+            }
+            if (e.data && e.data.type === 'FSA_OPEN_FILE') {
+                await openFileDashboard(e.source, e.data.subFolder);
+                return;
+            }
+            
             if (e.data && e.data.type === 'LOAD_DASHBOARD_CONFIG') {
                 dashboardConfig = e.data.data;
                 renderDashboard();
@@ -217,11 +284,151 @@
             });
         });
 
+        async function saveToFileDashboard(blob, defaultName, isAuto = false, subFolder = null) {
+            try {
+                let dirHandle = null;
+                try { dirHandle = await getHandle('workspace_dir'); } catch(e) {}
+                
+                let targetDirHandle = dirHandle;
+                if (dirHandle && subFolder) {
+                    try {
+                        targetDirHandle = await dirHandle.getDirectoryHandle(subFolder, { create: true });
+                    } catch(e) { console.warn("Lỗi tạo/đọc thư mục con:", e); }
+                }
+                
+                if (targetDirHandle) {
+                    try {
+                        const fileHandle = await targetDirHandle.getFileHandle(defaultName, { create: true });
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        if (!isAuto) {
+                            alert(`Đã xuất file thành công vào thư mục "${subFolder}":\n${defaultName}`);
+                        } else {
+                            console.log("Đã tự động lưu file: " + defaultName);
+                        }
+                        return;
+                    } catch(err) {
+                        console.warn("Direct write failed, falling back", err);
+                    }
+                }
+                
+                if (!isAuto && window.showSaveFilePicker) {
+                    let opts = { suggestedName: defaultName };
+                    if (targetDirHandle) {
+                        opts.startIn = targetDirHandle;
+                    }
+                    
+                    try {
+                        const fileHandle = await window.showSaveFilePicker(opts);
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        return;
+                    } catch(e) {
+                        if (e.name === 'AbortError') return;
+                        if (e.message.includes('Cross origin') || e.name === 'SecurityError' || e.name === 'NotAllowedError') {
+                            console.warn("showSaveFilePicker block by policy, fallback to <a> download");
+                        } else {
+                            throw e;
+                        }
+                    }
+                } 
+                
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = defaultName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            } catch(e) {
+                if (e.name !== 'AbortError') {
+                    console.error("Lỗi lưu file:", e);
+                    alert("Không thể lưu file (Dashboard): " + e.message);
+                }
+            }
+        }
+
+        async function openFileDashboard(sourceIframe, subFolder = null) {
+            try {
+                if (!window.showOpenFilePicker) {
+                    sourceIframe.postMessage({ type: 'FSA_FILE_FALLBACK' }, '*');
+                    return;
+                }
+                
+                let opts = {
+                    types: [{
+                        description: 'Files',
+                        accept: {
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+                            'text/plain': ['.txt', '.csv']
+                        }
+                    }]
+                };
+                
+                try {
+                    const dirHandle = await getHandle('workspace_dir');
+                    let targetDirHandle = dirHandle;
+                    if (dirHandle && subFolder) {
+                        try {
+                            targetDirHandle = await dirHandle.getDirectoryHandle(subFolder, { create: true });
+                        } catch(e) {}
+                    }
+                    if (targetDirHandle) opts.startIn = targetDirHandle;
+                } catch(e) {}
+                
+                try {
+                    const [fileHandle] = await window.showOpenFilePicker(opts);
+                    const file = await fileHandle.getFile();
+                    const arrayBuffer = await file.arrayBuffer();
+                    sourceIframe.postMessage({
+                        type: 'FSA_FILE_OPENED',
+                        filename: file.name,
+                        buffer: arrayBuffer
+                    }, '*');
+                } catch(e) {
+                    if (e.name !== 'AbortError') {
+                        sourceIframe.postMessage({ type: 'FSA_FILE_FALLBACK' }, '*');
+                    }
+                }
+            } catch (e) {
+                console.error("Lỗi đọc file:", e);
+            }
+        }
+
         // --- Modal Logic ---
         function openConfigModal() {
             renderConfigForms();
+            checkWorkspaceStatus();
             document.getElementById('configModal').style.display = 'flex';
         }
+        
+        async function checkWorkspaceStatus() {
+            try {
+                const handle = await getHandle('workspace_dir');
+                if (handle) {
+                    document.getElementById('workspaceStatus').textContent = `Đã thiết lập: ${handle.name}`;
+                    document.getElementById('workspaceStatus').style.color = '#10b981';
+                }
+            } catch (e) {}
+        }
+        
+        async function selectWorkspace() {
+            try {
+                if (!window.showDirectoryPicker) {
+                    alert("Trình duyệt của bạn không hỗ trợ tính năng chọn thư mục mặc định (File System Access API). Vui lòng dùng Chrome/Edge trên HTTPS hoặc Localhost.");
+                    return;
+                }
+                const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                await saveHandle('workspace_dir', dirHandle);
+                checkWorkspaceStatus();
+                alert("Đã thiết lập thư mục làm việc thành công!");
+            } catch (e) {
+                if (e.name !== 'AbortError') alert("Lỗi: " + e.message);
+            }
+        }
+
         function closeConfigModal() {
             document.getElementById('configModal').style.display = 'none';
         }
