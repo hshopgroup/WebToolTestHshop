@@ -749,7 +749,11 @@
             if (!e.data || !e.data.type) return;
             
             if (e.data.type === 'FSA_FILE_OPENED') {
-                processImportedFile(e.data.file);
+                if (e.data.file) {
+                    processImportedFile(e.data.file);
+                } else if (e.data.filename && e.data.buffer) {
+                    processImportedData(e.data.filename, e.data.buffer);
+                }
                 return;
             }
             if (e.data.type === 'FSA_FILE_FALLBACK') {
@@ -1521,10 +1525,18 @@
         }
 
         function processImportedFile(file) {
+            if (!file) return;
             const reader = new FileReader();
             reader.onload = e => { 
-                const data = e.target.result;
-                if (file.name.endsWith('.xlsx')) {
+                processImportedData(file.name, e.target.result);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processImportedData(filename, data) {
+            if (!filename || !data) return;
+            try {
+                if (filename.toLowerCase().endsWith('.xlsx')) {
                     const wb = XLSX.read(data, {type: 'array'});
                     scriptWorkbook = {};
                     
@@ -1535,7 +1547,6 @@
                         
                         // --- Xử lý riêng sheet DashboardConfig ---
                         if (sheetName === "DashboardConfig") {
-                            // Cấu trúc mảng 2D: [["Key", "JSONData"], ["dashboardConfig", "{...}"]]
                             if (arr2D[1] && arr2D[1][1]) {
                                 try {
                                     const parsedConfig = JSON.parse(arr2D[1][1]);
@@ -1561,9 +1572,9 @@
                         for (let i = startIndex; i < arr2D.length; i++) {
                             const row = arr2D[i];
                             if (!row || row.length === 0) continue;
-                            const cmd = row[0] || "";
-                            const delay = row[1] !== undefined ? row[1] : 500;
-                            const desc = row[2] || "";
+                            const cmd = (row[0] !== undefined && row[0] !== null) ? String(row[0]).trim() : "";
+                            const delay = (row[1] !== undefined && row[1] !== null && String(row[1]).trim() !== "") ? row[1] : 500;
+                            const desc = (row[2] !== undefined && row[2] !== null) ? String(row[2]).trim() : "";
                             
                             if (cmd) {
                                 scriptText += `${cmd}||${delay}`;
@@ -1588,15 +1599,12 @@
                     scriptWorkbook[currentScriptSheet] = new TextDecoder("utf-8").decode(data);
                     updateScriptSheetUI();
                     saveScriptToStorage();
+                    logSys(`Đã nạp file script ${filename}`);
                 }
-            };
-            
-            if (file.name.endsWith('.xlsx')) {
-                reader.readAsArrayBuffer(file);
-            } else {
-                reader.readAsArrayBuffer(file); // Giữ nguyên array buffer và decode cho an toàn tiếng Việt
+            } catch (err) {
+                console.error("Lỗi khi xử lý file import:", err);
+                alert("Lỗi nạp file: " + err.message);
             }
-            event.target.value = ''; // Reset
         }
 
         // --- Chart.js & Zoom Settings ---
