@@ -59,7 +59,8 @@
   - Tích hợp thư viện `SheetJS`.
   - Thay thế toàn bộ tính năng export mặc định sang định dạng `xlsx` (bao gồm Terminal, Plotter và Script List).
   - Tích hợp **File System Access API** (chỉ có trên Chrome/Edge): cho phép hiện hộp thoại "Save As" chuyên nghiệp, có thể lưu chép đè file cũ thay vì tải nhiều file rác vào Downloads.
-  - Cho phép người dùng chọn và ghi nhớ **Thư mục làm việc mặc định (Workspace)** trong mục "Cài đặt Layout". Tự động tự động phân loại và mở trực tiếp tới các thư mục con tương ứng (`Workspace/Terminal/`, `Workspace/Script/`, `Workspace/Plotter/`) mỗi khi Export/Import.
+  - Cho phép người dùng chọn và ghi nhớ **Thư mục làm việc mặc định (Workspace)** trong mục "Cài đặt Layout". Tự động phân loại và mở trực tiếp tới các thư mục con tương ứng (`Workspace/Terminal/`, `Workspace/Script/`, `Workspace/Plotter/`) mỗi khi Export/Import.
+  - **Tùy biến Cú pháp đặt tên File Export:** Hỗ trợ tùy chỉnh công thức đặt tên file tự động trong Cài đặt Layout theo định dạng như `Y{YY}{MM}{DD}_{INDEX}_{TYPE}_{NAME}` (Ví dụ: `Y260812_001_Script_Workbook.xlsx`). Số thứ tự `INDEX` sẽ tự động tăng dần trong ngày (001, 002, 003...).
 - **Quản lý kịch bản đa Sheet (Multi-Sheet Script):**
   - Chuyển Script List thành một phần mềm quản lý kịch bản thu nhỏ.
   - Cho phép tạo, xóa, chuyển đổi các Sheet lệnh trực tiếp trên Web.
