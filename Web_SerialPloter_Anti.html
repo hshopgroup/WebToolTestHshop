@@ -1539,6 +1539,7 @@
                 if (filename.toLowerCase().endsWith('.xlsx')) {
                     const wb = XLSX.read(data, {type: 'array'});
                     scriptWorkbook = {};
+                    let pendingDashboardConfig = null;
                     
                     wb.SheetNames.forEach(sheetName => {
                         const ws = wb.Sheets[sheetName];
@@ -1549,10 +1550,7 @@
                         if (sheetName === "DashboardConfig") {
                             if (arr2D[1] && arr2D[1][1]) {
                                 try {
-                                    const parsedConfig = JSON.parse(arr2D[1][1]);
-                                    if (window.parent !== window) {
-                                        window.parent.postMessage({ type: 'LOAD_DASHBOARD_CONFIG', data: parsedConfig }, '*');
-                                    }
+                                    pendingDashboardConfig = JSON.parse(arr2D[1][1]);
                                 } catch (err) {
                                     console.error("Lỗi khi parse DashboardConfig:", err);
                                 }
@@ -1594,6 +1592,11 @@
                     updateScriptSheetUI();
                     logSys(`Đã nạp file Excel chứa ${Object.keys(scriptWorkbook).length} tập lệnh.`);
                     saveScriptToStorage();
+
+                    // --- Chỉ sau khi đã nạp và lưu xong Script mới gửi lệnh khôi phục Dashboard Layout ---
+                    if (pendingDashboardConfig && window.parent !== window) {
+                        window.parent.postMessage({ type: 'LOAD_DASHBOARD_CONFIG', data: pendingDashboardConfig }, '*');
+                    }
                 } else {
                     // Đọc TXT / CSV thông thường vào Sheet hiện tại
                     scriptWorkbook[currentScriptSheet] = new TextDecoder("utf-8").decode(data);
